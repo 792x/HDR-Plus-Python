@@ -1,0 +1,36 @@
+#:kivy 1.1.0
+
+Root:
+    BoxLayout:
+        orientation: 'vertical'
+        BoxLayout:
+            Image:
+                id: image1
+                source: root.image
+                size_hint_x: 1
+                allow_stretch: True
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: 'Select burst'
+                on_release: root.show_load()
+
+<LoadDialog>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
+
+            Button:
+                text: "Select"
+                on_release: root.load(filechooser.path, filechooser.selection)

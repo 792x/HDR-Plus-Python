@@ -2,39 +2,120 @@ import cv2 as cv
 import numpy as np
 import rawpy
 import imageio
-from matplotlib import pyplot as plt
 import math
 import os
 import sys
+import multiprocessing
+from kivy.app import App
+from kivy.uix.floatlayout import FloatLayout
+from kivy.factory import Factory
+from kivy.properties import ObjectProperty
+from kivy.uix.popup import Popup
+from kivy.uix.image import Image
 
-dataset_path = 'C:/20171106_subset/bursts'
-burst = f'{dataset_path}/4KK2_20150823_152106_985'
+def load_image(image_path):
+    with rawpy.imread(image_path) as raw:
+        image = raw.postprocess(gamma=(1,1), no_auto_bright=True, output_bps=16)
+        return image
 
-files = []
-
-for i in range(100):
-    if i < 10:
-        filename = f'payload_N00{i}.dng'
-    else:
-        filename = f'payload_N0{i}.dng'
-    path = f'{burst}/{filename}'
-    try:
-        with rawpy.imread(path) as raw:
-            print(f'Reading file: \"{path}\"')
-            image = raw.postprocess(gamma=(1,1), no_auto_bright=True, output_bps=16)
-            files.append(image)
-    except:
-        if i == 0:
-            print(f'Burst format at \"{burst}\" not recognized.')
-            sys.exit(0)
+def load_images(burst_path):
+    print('Loading images...')
+    images = []
+    paths = []
+    for i in range(100):
+        if i < 10:
+            filename = f'payload_N00{i}.dng'
         else:
+            filename = f'payload_N0{i}.dng'
+        file_path = f'{burst_path}/{filename}'
+        if os.path.isfile(file_path):
+            paths.append(file_path)
+        else:
+            if i == 0:
+                raise ValueError
             break
+    p = multiprocessing.Pool(multiprocessing.cpu_count()-1)
+    for image in p.imap_unordered(load_image, paths):
+        images.append(image)
+    return images
 
-def show_image(image):
-    cv.namedWindow('image', cv.WINDOW_NORMAL)
-    cv.imshow('image', image)
-    cv.waitKey(0)
+def align_images(images):
+    print('Aligning images...')
+    alignMTB = cv.createAlignMTB()
+    alignMTB.process(images, images)
+    return images
 
-show_image(files[0])
+def merge_images(images):
+    print('Merging images...')
+    # TODO
+    return images[0]
 
-# TODO
+def HDR(burst_path):
+    try:
+        images = load_images(burst_path)
+    except:
+        print(f'Burst format at \"{burst_path}\" not recognized.')
+        return 'gallery.jpg'
+
+    aligned = align_images(images)
+    merged = merge_images(aligned)
+    imageio.imsave('Output/output.jpg', merged)
+    return 'Output/output.jpg'
+
+class Imglayout(FloatLayout):
+
+    def __init__(self,**args):
+        super(Imglayout,self).__init__(**args)
+
+        with self.canvas.before:
+            Color(0,0,0,0)
+            self.rect=Rectangle(size=self.size,pos=self.pos)
+
+        self.bind(size=self.updates,pos=self.updates)
+    def updates(self,instance,value):
+        self.rect.size=instance.size
+        self.rect.pos=instance.pos
+
+class LoadDialog(FloatLayout):
+    load = ObjectProperty(None)
+    cancel = ObjectProperty(None)
+
+class Root(FloatLayout):
+    loadfile = ObjectProperty(None)
+    image = 'gallery.jpg'
+    path = ''
+    def build():
+        c = Imglayout()
+        root.add_widget(c)
+
+    def dismiss_popup(self):
+        self._popup.dismiss()
+
+    def show_load(self):
+        def HDR_callback(instance):
+            image_path = HDR(self.path)
+            self.image = image_path
+            self.ids.image1.source = self.image
+            self.ids.image1.reload()
+
+        content = LoadDialog(load=self.load, cancel=self.dismiss_popup)
+        self._popup = Popup(title="Select burst image", content=content,
+                            size_hint=(0.9, 0.9))
+        self._popup.bind(on_dismiss=HDR_callback)
+        self._popup.open()
+
+    def load(self, path, filename):
+        self.path = path
+        self.dismiss_popup()
+
+
+class Editor(App):
+    pass
+
+
+Factory.register('Root', cls=Root)
+Factory.register('LoadDialog', cls=LoadDialog)
+
+
+if __name__ == '__main__':
+    Editor().run()

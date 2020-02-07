@@ -1,0 +1,14 @@
+numpy==1.17.4
+opencv-python==4.2.0.32
+rawpy==0.14.0
+imageio==2.6.1
+kivy==1.11.1
+docutils==0.16
+pygments==2.5.2
+setuptools==45.1.0
+wheel==0.34.2
+kivy-deps.glew==0.2.0
+kivy-deps.sdl2==0.2.0
+pypiwin32==223
+kivy-deps.gstreamer==0.2.0
+kivy-deps.angle==0.2.0
