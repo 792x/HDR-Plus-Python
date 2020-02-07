@@ -12,6 +12,7 @@ from kivy.factory import Factory
 from kivy.properties import ObjectProperty
 from kivy.uix.popup import Popup
 from kivy.uix.image import Image
+from datetime import datetime, timedelta
 
 def load_image(image_path):
     with rawpy.imread(image_path) as raw:
@@ -34,7 +35,7 @@ def load_images(burst_path):
             if i == 0:
                 raise ValueError
             break
-    p = multiprocessing.Pool(multiprocessing.cpu_count()-1)
+    p = multiprocessing.Pool(min(multiprocessing.cpu_count()-1, len(paths)))
     for image in p.imap_unordered(load_image, paths):
         images.append(image)
     return images
@@ -51,6 +52,7 @@ def merge_images(images):
     return images[0]
 
 def HDR(burst_path):
+    start = datetime.utcnow()
     try:
         images = load_images(burst_path)
     except:
@@ -60,6 +62,8 @@ def HDR(burst_path):
     aligned = align_images(images)
     merged = merge_images(aligned)
     imageio.imsave('Output/output.jpg', merged)
+    time_dif = datetime.utcnow() - start
+    print(f'Processed in: {time_dif.total_seconds()*1000} ms')
     return 'Output/output.jpg'
 
 class Imglayout(FloatLayout):
