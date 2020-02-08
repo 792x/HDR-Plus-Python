@@ -38,33 +38,61 @@ def load_images(burst_path):
     p = multiprocessing.Pool(min(multiprocessing.cpu_count()-1, len(paths)))
     for image in p.imap_unordered(load_image, paths):
         images.append(image)
+    with rawpy.imread(paths[0]) as raw:
+        ref_img = raw.postprocess()
+    return images, ref_img
+
+def align_images(images, grayscale):
+    print('Aligning images...')
+
+    # This sucks ↓ it is worse than no alignment at all
+    # alignMTB = cv.createAlignMTB()
+    # alignMTB.process(images[:2], images)
+ 
     return images
 
-def align_images(images):
-    print('Aligning images...')
-    alignMTB = cv.createAlignMTB()
-    alignMTB.process(images, images)
-    return images
+def to_grayscale(image):
+    return np.mean(image, axis=2, dtype=np.uint8)
+
+def average_image(images):
+    avg_img = np.mean(np.array(images), axis=0)
+    return avg_img
 
 def merge_images(images):
     print('Merging images...')
     # TODO
-    return images[0]
+    return average_image(images)
+
+def finish_image(image):
+    print('Finishing image...')
+    # TODO
+    return image
 
 def HDR(burst_path):
     start = datetime.utcnow()
     try:
-        images = load_images(burst_path)
-    except:
+        images, ref_img = load_images(burst_path)
+    except Exception as e:
+        print(e)
         print(f'Burst format at \"{burst_path}\" not recognized.')
-        return 'gallery.jpg'
+        return 'gallery.jpg', 'gallery.jpg'
+    imageio.imsave('Output/input.jpg', ref_img)
 
-    aligned = align_images(images)
+    grayscale = []
+    p = multiprocessing.Pool(min(multiprocessing.cpu_count()-1, len(images)))
+    for image in p.imap_unordered(to_grayscale, images):
+        grayscale.append(image)
+
+    aligned = align_images(images, grayscale)
+
     merged = merge_images(aligned)
-    imageio.imsave('Output/output.jpg', merged)
+
+    image = finish_image(merged)
+
+    imageio.imsave('Output/output.jpg', image)
     time_dif = datetime.utcnow() - start
     print(f'Processed in: {time_dif.total_seconds()*1000} ms')
-    return 'Output/output.jpg'
+    return 'Output/input.jpg', 'Output/output.jpg'
 
 class Imglayout(FloatLayout):
 
@@ -86,6 +114,7 @@ class LoadDialog(FloatLayout):
 
 class Root(FloatLayout):
     loadfile = ObjectProperty(None)
+    original = 'gallery.jpg'
     image = 'gallery.jpg'
     path = ''
     def build():
@@ -97,8 +126,11 @@ class Root(FloatLayout):
 
     def show_load(self):
         def HDR_callback(instance):
-            image_path = HDR(self.path)
+            original_path, image_path = HDR(self.path)
+            self.original = original_path
             self.image = image_path
+            self.ids.image0.source = self.original
+            self.ids.image0.reload()
             self.ids.image1.source = self.image
             self.ids.image1.reload()
 

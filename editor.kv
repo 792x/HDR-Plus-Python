@@ -5,9 +5,14 @@ Root:
         orientation: 'vertical'
         BoxLayout:
             Image:
+                id: image0
+                source: root.original
+                size_hint_x: 0.5
+                allow_stretch: True
+            Image:
                 id: image1
                 source: root.image
-                size_hint_x: 1
+                size_hint_x: 0.5
                 allow_stretch: True
         BoxLayout:
             size_hint_y: None
