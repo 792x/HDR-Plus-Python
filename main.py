@@ -243,7 +243,7 @@ class Root(FloatLayout):
         self.dismiss_popup()
 
 
-class Editor(App):
+class HDR_Plus(App):
     pass
 
 
@@ -252,4 +252,4 @@ Factory.register('LoadDialog', cls=LoadDialog)
 
 
 if __name__ == '__main__':
-    Editor().run()
+    HDR_Plus().run()
