@@ -9,7 +9,7 @@ To download the subset of bursts used in this project, download the [Google Clou
 gsutil -m cp -r gs://hdrplusdata/20171106_subset .
 ```
 
-## Setup
+## Setup (Windows)
 
 Run `install_requirements.bat`
 
