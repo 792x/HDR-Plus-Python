@@ -48,7 +48,7 @@ image : numpy ndarray
 Returns: numpy ndarray, where each pixel has one value (average of 3 given values)
 '''
 def to_grayscale(image):
-    return np.mean(image, axis=2, dtype=np.uint8)
+    return np.mean(image, axis=2)
 
 
 '''

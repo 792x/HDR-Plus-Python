@@ -19,6 +19,19 @@ def sharpness(image):
     # The higher the value, the sharper the image
     return cv.Laplacian(image, cv.CV_64F).var()
 
+
+'''
+Downsample an image by a factor of 2 in width and height
+
+image : numpy.ndarray
+    The image to be downsampled
+
+Returns: numpy.ndarray
+'''
+def downsample(image):
+    return cv.resize(image, None, fx=0.5, fy=0.5)
+
+
 '''
 Step 1 of HDR+ pipeline: align
 
@@ -37,10 +50,8 @@ def align_images(images, grayscale):
     # frames of the burst as reference frame
     sharpness_list = []
     print('Choosing reference frame...')
-    p = multiprocessing.Pool(min(multiprocessing.cpu_count()-1, 3))
-    for value in p.imap(sharpness, images[:3]):
-        sharpness_list.append(value)
     for i in range(3):
+        sharpness_list.append(sharpness(images[i]))
         print(f'Frame {i}: sharpness = {sharpness_list[i]}')
     max_sharpness = 0
     sharpest = 0
@@ -49,9 +60,21 @@ def align_images(images, grayscale):
             max_sharpness = x
             sharpest = i
     reference_frame = images[sharpest]
+    reference_grayscale = grayscale[sharpest]
+    del images[sharpest]
+    del grayscale[sharpest]
     print(f'Picked reference frame: {sharpest}')
+
+    # Downsample grayscale images
+    # Average 2 x 2 blocks
+    print('Downsampling grayscale images...')
+    downsampled_grayscale = []
+    for image in grayscale:
+        downsampled_grayscale.append(downsample(image))
+    reference_downsampled_grayscale = downsample(reference_grayscale)
 
     # TODO
     
     print(f'Alignment finished in {time_diff(start)} ms.\n')
-    return images
+    return downsampled_grayscale
+    #return images
