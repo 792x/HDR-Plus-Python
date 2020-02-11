@@ -73,8 +73,15 @@ def align_images(images, grayscale):
         downsampled_grayscale.append(downsample(image))
     reference_downsampled_grayscale = downsample(reference_grayscale)
 
-    # TODO
+    # Hierarchical alignment
+    for image in downsampled_grayscale:
+        # 4-level gaussian pyramid
+        # Each consecutive level has a lower resolution than the previous one
+        pyramid = []
+        for level in range(4):
+            pyramid.append(cv.pyrDown(image) if level == 0 else cv.pyrDown(pyramid[level-1]))
+        
+        # TODO
     
     print(f'Alignment finished in {time_diff(start)} ms.\n')
-    return downsampled_grayscale
-    #return images
+    return images
