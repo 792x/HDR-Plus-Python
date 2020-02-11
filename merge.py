@@ -1,5 +1,8 @@
 import cv2 as cv
 import numpy as np
+from datetime import datetime
+
+from utils import time_diff
 
 
 '''
@@ -24,8 +27,10 @@ images : list of numpy ndarray
 Returns: numpy ndarray (merged image)
 '''
 def merge_images(images):
-    print('Merging images...')
+    print(f'\n{"="*30}\nMerging images...\n{"="*30}')
+    start = datetime.utcnow()
 
     # TODO
 
+    print(f'Merging finished in {time_diff(start)} ms.\n')
     return average_image(images)

@@ -6,14 +6,19 @@ import math
 import os
 import sys
 import multiprocessing
+from datetime import datetime
 
+os.environ['KIVY_NO_CONSOLELOG'] = '1'
+import kivy
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
 from kivy.factory import Factory
 from kivy.properties import ObjectProperty
 from kivy.uix.popup import Popup
 from kivy.uix.image import Image
-from datetime import datetime, timedelta
+from kivy.logger import Logger
+
+from utils import time_diff
 
 from align import align_images
 from merge import merge_images
@@ -55,7 +60,8 @@ burst_path : str
 Returns: list of raw images, list of grayscale images, reference image
 '''
 def load_images(burst_path):
-    print('Loading images...')
+    print(f'\n{"="*30}\nLoading images...\n{"="*30}')
+    start = datetime.utcnow()
     images = []
     grayscale = []
     
@@ -75,19 +81,23 @@ def load_images(burst_path):
             break
     
     # Load raw images
+    print('Loading raw images...')
     p = multiprocessing.Pool(min(multiprocessing.cpu_count()-1, len(paths)))
-    for image in p.imap_unordered(load_image, paths):
+    for image in p.imap(load_image, paths):
         images.append(image)
     
     # Convert images to grayscale
+    print('Converting to grayscale...')
     p = multiprocessing.Pool(min(multiprocessing.cpu_count()-1, len(images)))
     for image in p.imap(to_grayscale, images):
         grayscale.append(image)
 
-    # Get reference image
+    # Get a reference image to compare results
+    print('Getting reference image...')
     with rawpy.imread(paths[0]) as raw:
         ref_img = raw.postprocess()
 
+    print(f'Loading finished in {time_diff(start)} ms.\n')
     return images, grayscale, ref_img
 
 
@@ -121,8 +131,7 @@ def HDR(burst_path):
         # Save the HDR image
         imageio.imsave('Output/output.jpg', image)
 
-        time_dif = datetime.utcnow() - start
-        print(f'Processed in: {time_dif.total_seconds()*1000} ms')
+        print(f'Processed in: {time_diff(start)} ms')
 
         return 'Output/input.jpg', 'Output/output.jpg'
 
