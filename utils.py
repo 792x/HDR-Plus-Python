@@ -37,11 +37,11 @@ class Point:
         return f'({self.x}, {self.y})'
     
     # Point addition
-    def __add__(self, p: Point):
+    def __add__(self, p):
         return Point(self.x + p.x, self.y + p.y)
     
     # Point subtraction
-    def __sub__(self, p: Point):
+    def __sub__(self, p):
         return Point(self.x - p.x, self.y - p.y)
     
     # Scalar multiplication
