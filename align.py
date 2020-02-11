@@ -3,7 +3,7 @@ import numpy as np
 from datetime import datetime
 import multiprocessing
 
-from utils import time_diff
+from utils import time_diff, Point
 
 
 '''
@@ -30,6 +30,30 @@ Returns: numpy.ndarray
 '''
 def downsample(image):
     return cv.resize(image, None, fx=0.5, fy=0.5)
+
+
+'''
+Determines the best offset for tiles of the image at a given resolution, 
+provided the offsets for the layer above
+
+layer : numpy.ndarray
+    The layer for which the offset needs to be calculated
+prev_alignment : Point
+    Alignment of the previous layer
+prev_min : Point
+    Min search region
+prev_max : Point
+    Max search region
+
+Returns: Point
+'''
+def align_layer(layer, prev_alignment, prev_min, prev_max):
+
+    # Inspiration from https://github.com/timothybrooks/hdr-plus/blob/master/src/align.cpp
+
+    # TODO
+
+    return prev_alignment
 
 
 '''
@@ -77,9 +101,32 @@ def align_images(images, grayscale):
     for image in downsampled_grayscale:
         # 4-level gaussian pyramid
         # Each consecutive level has a lower resolution than the previous one
-        pyramid = []
-        for level in range(4):
-            pyramid.append(cv.pyrDown(image) if level == 0 else cv.pyrDown(pyramid[level-1]))
+        pyramid = [image]
+        for level in range(1,4):
+            pyramid.append(cv.pyrDown(pyramid[level-1]))
+
+        # Inspiration from https://github.com/timothybrooks/hdr-plus/blob/master/src/align.cpp
+
+        downsample_rate = 2 # Default value in OpenCV
+
+        min_search = Point(-4, -4)
+        max_search = Point(3, 3)
+
+        min_3 = Point(0, 0)
+        min_2 = downsample_rate * min_3 + min_search
+        min_1 = downsample_rate * min_2 + min_search
+
+        max_3 = Point(0, 0)
+        max_2 = downsample_rate * max_3 + max_search
+        max_1 = downsample_rate * max_2 + max_search
+
+        # initial alignment of previous layer is 0, 0
+        alignment_3 = Point(0, 0)
+
+        # Hierarchical alignment functions
+        alignment_2 = align_layer(pyramid[1], alignment_3, min_3, max_3)
+        alignment_1 = align_layer(pyramid[2], alignment_2, min_2, max_2)
+        alignment_0 = align_layer(pyramid[3], alignment_1, min_1, max_1)
         
         # TODO
     
