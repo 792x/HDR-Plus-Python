@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-
+import halide as hl
 
 '''
 Get the difference between a start and end time (or current time if none given) in ms
@@ -27,8 +27,8 @@ y : float
 """
 class Point:
     def __init__(self, x, y):
-        self.x = x
-        self.y = y
+        self.x = hl.Expr(x)
+        self.y = hl.Expr(y)
 
     def __str__(self):
         return f'({self.x}, {self.y})'

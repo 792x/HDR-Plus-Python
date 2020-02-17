@@ -13,11 +13,11 @@ image : numpy ndarray
 
 Returns: numpy ndarray (finished image)
 '''
-def finish_image(image):
+def finish_image(imgs, width, height, black_point, white_point, white_balance, compression, gain):
     print(f'\n{"="*30}\nFinishing image...\n{"="*30}')
     start = datetime.utcnow()
 
     # TODO
 
     print(f'Finishing finished in {time_diff(start)} ms.\n')
-    return image
+    return imgs

@@ -14,8 +14,8 @@ images : list of numpy ndarray
 
 Returns: numpy ndarray (average of the given images)
 '''
-def average_image(images):
-    return np.mean(np.array(images), axis=0)
+def average_image(imgs):
+    return np.mean(np.array(imgs), axis=0)
 
 
 '''
@@ -26,11 +26,11 @@ images : list of numpy ndarray
 
 Returns: numpy ndarray (merged image)
 '''
-def merge_images(images):
+def merge_images(imgs, alignment):
     print(f'\n{"="*30}\nMerging images...\n{"="*30}')
     start = datetime.utcnow()
 
     # TODO
 
     print(f'Merging finished in {time_diff(start)} ms.\n')
-    return average_image(images)
+    return imgs

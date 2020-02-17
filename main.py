@@ -6,6 +6,7 @@ import math
 import os
 import sys
 import multiprocessing
+import halide as hl
 from datetime import datetime
 
 os.environ['KIVY_NO_CONSOLELOG'] = '1'
@@ -63,7 +64,6 @@ def load_images(burst_path):
     print(f'\n{"="*30}\nLoading images...\n{"="*30}')
     start = datetime.utcnow()
     images = []
-    grayscale = []
     
     # Create list of paths to the images
     paths = []
@@ -84,13 +84,7 @@ def load_images(burst_path):
     print('Loading raw images...')
     p = multiprocessing.Pool(min(multiprocessing.cpu_count()-1, len(paths)))
     for image in p.imap(load_image, paths):
-        images.append(image)
-    
-    # Convert images to grayscale
-    print('Converting to grayscale...')
-    p = multiprocessing.Pool(min(multiprocessing.cpu_count()-1, len(images)))
-    for image in p.imap(to_grayscale, images):
-        grayscale.append(image)
+        images.append(hl.Buffer(image))
 
     # Get a reference image to compare results
     print('Getting reference image...')
@@ -98,7 +92,9 @@ def load_images(burst_path):
         ref_img = raw.postprocess()
 
     print(f'Loading finished in {time_diff(start)} ms.\n')
-    return images, grayscale, ref_img
+
+
+    return images, ref_img
 
 
 '''
@@ -109,27 +105,35 @@ burst_path : str
 
 Returns: str, str (paths to the reference and HDR images, respectively)
 '''
-def HDR(burst_path):
+def HDR(burst_path, black_point, white_point, white_balance, compression, gain):
     try:
         start = datetime.utcnow()
 
         # Load the images
-        images, grayscale, ref_img = load_images(burst_path)
+        images, ref_img = load_images(burst_path)
+
+        # dimensions of image should be 3
+        print(images[0].dimensions())
+        # length should be 2+
 
         # Save the reference image
         imageio.imsave('Output/input.jpg', ref_img)
 
         # Align the images
-        images = align_images(images, grayscale)
+        alignment = align_images(images)
 
         # Merge the images
-        image = merge_images(images)
+        # merged = merge_images(imgs, alignment)
 
         # Finish the image
-        image = finish_image(image)
+        # finished = finish_image(merged, width, height, black_point, white_point, white_balance, compression, gain)
 
-        # Save the HDR image
-        imageio.imsave('Output/output.jpg', image)
+        # TODO: replace with finished image rather than brighter
+        brighter = hl.Func("brighter")
+        x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+        brighter[x, y, c] = hl.cast(hl.UInt(8), hl.min(images[0][x, y, c] * 1.5, 255))
+        output_image = brighter.realize(images[0].width(), images[0].height(), images[0].channels())
+        imageio.imsave('Output/output.jpg', output_image)
 
         print(f'Processed in: {time_diff(start)} ms')
 
@@ -142,18 +146,18 @@ def HDR(burst_path):
 
 
 class Imglayout(FloatLayout):
-    def __init__(self,**args):
-        super(Imglayout,self).__init__(**args)
+    def __init__(self, **args):
+        super(Imglayout, self).__init__(**args)
 
         with self.canvas.before:
-            Color(0,0,0,0)
-            self.rect=Rectangle(size=self.size,pos=self.pos)
+            Color(0, 0, 0, 0)
+            self.rect = Rectangle(size=self.size,pos=self.pos)
 
         self.bind(size=self.updates,pos=self.updates)
 
-    def updates(self,instance,value):
-        self.rect.size=instance.size
-        self.rect.pos=instance.pos
+    def updates(self, instance, value):
+        self.rect.size = instance.size
+        self.rect.pos = instance.pos
 
 
 class LoadDialog(FloatLayout):
@@ -181,7 +185,7 @@ class Root(FloatLayout):
     def show_load(self):
         # Function to call the HDR+ pipeline
         def HDR_callback(instance):
-            original_path, image_path = HDR(self.path)
+            original_path, image_path = HDR(self.path, 0, 0, 0, 0, 0)
             self.original = original_path
             self.image = image_path
             self.ids.image0.source = self.original

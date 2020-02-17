@@ -2,9 +2,15 @@ import cv2 as cv
 import numpy as np
 from datetime import datetime
 import multiprocessing
+import halide as hl
 
 from utils import time_diff, Point
 
+T_SIZE = 32
+T_SIZE_2 = 16
+MIN_OFFSET = -168
+MAX_OFFSET = 126
+DOWNSAMPLE_RATE = 4
 
 '''
 Get a value representing the sharpness of an image
@@ -32,6 +38,64 @@ def downsample(image):
     return cv.resize(image, None, fx=0.5, fy=0.5)
 
 
+def gauss_down4(input, name):
+    output = hl.Func(name)
+    k = hl.Func(name + "_filter")
+    x, y, n = hl.Var("x"), hl.Var("y"), hl.Var('n')
+    r = hl.RDom(-2, 5, -2, 5)
+
+    k[x, y] = 0
+    k[-2, -2] = 2
+    k[-1, -2] = 4
+    k[0, -2] = 5
+    k[1, -2] = 4
+    k[2, -2] = 2
+    k[-2, -1] = 4
+    k[-1, -1] = 9
+    k[0,-1] = 12
+    k[1, -1] = 9
+    k[2, -1] = 4
+    k[-2, 0] = 5
+    k[-1, 0] = 12
+    k[0, 0] = 15
+    k[1, 0] = 12
+    k[2, 0] = 5
+    k[-2, 1] = 4
+    k[-1, 1] = 9
+    k[0, 1] = 12
+    k[1, 1] = 9
+    k[2, 1] = 4
+    k[-2, 2] = 2
+    k[-1, 2] = 4
+    k[0, 2] = 5
+    k[1, 2] = 4
+    k[2, 2] = 2
+
+    output[x, y, n] = hl.u16(sum(hl.u32(input[4*x + r.x, 4*y + r.y, n] * k[r.x, r.y])) / 159)
+
+    k.compute_root().parallel(y).parallel(x)
+    output.compute_root().parallel(y).vectorize(x, 16)
+
+    return output
+
+def box_down2(input, name):
+    output = hl.Func(name)
+
+    x, y, n = hl.Var("x"), hl.Var("y"), hl.Var('n')
+    r = hl.RDom(0, 2, 0, 2)
+
+    output[x, y, n] = hl.u16(sum(hl.u32(input[2 * x + r.x, 2 * y + r.y, n])) / 4)
+
+    output.compute_root().parallel(y).vectorize(x, 16)
+
+    return output
+
+def prev_tile(t):
+    return (t - 1)/DOWNSAMPLE_RATE
+
+def idx_layer(t, i):
+    return t * T_SIZE_2 / 2 + i
+
 '''
 Determines the best offset for tiles of the image at a given resolution, 
 provided the offsets for the layer above
@@ -49,12 +113,33 @@ Returns: Point
 '''
 def align_layer(layer, prev_alignment, prev_min, prev_max):
 
-    # Inspiration from https://github.com/timothybrooks/hdr-plus/blob/master/src/align.cpp
+    scores = hl.Func(layer.name() + "_scores")
+    alignment = hl.Func(layer.name() + "_alignment")
+    xi, yi, tx, ty, n = hl.Var("xi"), hl.Var("yi"), hl.Var('tx'),  hl.Var('ty'),  hl.Var('n')
+    r0 = hl.RDom(0, 16, 0, 16)
+    r1 = hl.RDom(-4, 8, -4, 8)
 
-    # TODO
+    prev_offset = DOWNSAMPLE_RATE * hl.clamp(Point(prev_alignment(prev_tile(tx), prev_tile(ty), n)), prev_min, prev_max)
 
-    return prev_alignment
+    x0 = idx_layer(tx, r0.x)
+    y0 = idx_layer(ty, r0.y)
+    x = x0 + prev_offset.x + xi
+    y = y0 + prev_offset.y + yi
 
+    ref_val = layer(x0, y0, 0)
+    alt_val = layer(x, y, n)
+
+    dist = abs(hl.i32(ref_val) - hl.i32(alt_val))
+
+    scores[xi, yi, tx, ty, n] = sum(dist)
+
+    alignment[tx, ty, n] = Point(hl.argmin(scores[r1.x, r1.y, tx, ty, n])) + prev_offset
+
+    scores.compute_at(alignment, tx).vectorize(xi, 8)
+
+    alignment.compute_root().parallel(ty).vectorize(tx, 16)
+
+    return alignment
 
 '''
 Step 1 of HDR+ pipeline: align
@@ -66,69 +151,47 @@ grayscale : list of numpy ndarray
 
 Returns: list of numpy ndarray (aligned images)
 '''
-def align_images(images, grayscale):
+def align_images(images):
     print(f'\n{"="*30}\nAligning images...\n{"="*30}')
     start = datetime.utcnow()
 
-    # Choose sharpest frame from the first 3 
-    # frames of the burst as reference frame
-    sharpness_list = []
-    print('Choosing reference frame...')
-    for i in range(3):
-        sharpness_list.append(sharpness(images[i]))
-        print(f'Frame {i}: sharpness = {sharpness_list[i]}')
-    max_sharpness = 0
-    sharpest = 0
-    for i, x in enumerate(sharpness_list):
-        if x > max_sharpness:
-            max_sharpness = x
-            sharpest = i
-    reference_frame = images[sharpest]
-    reference_grayscale = grayscale[sharpest]
-    del images[sharpest]
-    del grayscale[sharpest]
-    print(f'Picked reference frame: {sharpest}')
+    alignment_3 = hl.Func("layer_3_alignment")
+    alignment = hl.Func("alignment")
+    imgs_mirror = hl.Func("imgs_mirror")
+    layer_0 = hl.Func("layer_0")
+    layer_1 = hl.Func("layer_1")
+    layer_2 = hl.Func("layer_2")
 
-    # Downsample grayscale images
-    # Average 2 x 2 blocks
-    print('Downsampling grayscale images...')
-    downsampled_grayscale = []
-    for image in grayscale:
-        downsampled_grayscale.append(downsample(image))
-    reference_downsampled_grayscale = downsample(reference_grayscale)
+    tx, ty, n = hl.Var('tx'), hl.Var('ty'), hl.Var('n')
 
-    # Hierarchical alignment
-    for image in downsampled_grayscale:
-        # 4-level gaussian pyramid
-        # Each consecutive level has a lower resolution than the previous one
-        pyramid = [image]
-        for level in range(1,4):
-            pyramid.append(cv.pyrDown(pyramid[level-1]))
+    imgs_mirror = hl.BoundaryConditions.mirror_interior(images, 0, images[0].width(), 0, images[0].height())
+    layer_0 = box_down2(imgs_mirror, "layer_0")
+    layer_1 = gauss_down4(layer_0, "layer_1")
+    layer_2 = gauss_down4(layer_1, "layer_2")
 
-        # Inspiration from https://github.com/timothybrooks/hdr-plus/blob/master/src/align.cpp
+    min_search = Point(-4, -4)
+    max_search = Point(3, 3)
 
-        downsample_rate = 2 # Default value in OpenCV
+    min_3 = Point(0, 0)
+    min_2 = DOWNSAMPLE_RATE * min_3 + min_search
+    min_1 = DOWNSAMPLE_RATE * min_2 + min_search
 
-        min_search = Point(-4, -4)
-        max_search = Point(3, 3)
+    max_3 = Point(0, 0)
+    max_2 = DOWNSAMPLE_RATE * max_3 + max_search
+    max_1 = DOWNSAMPLE_RATE * max_2 + max_search
 
-        min_3 = Point(0, 0)
-        min_2 = downsample_rate * min_3 + min_search
-        min_1 = downsample_rate * min_2 + min_search
+    alignment_3[tx, ty, n] = Point(0, 0)
 
-        max_3 = Point(0, 0)
-        max_2 = downsample_rate * max_3 + max_search
-        max_1 = downsample_rate * max_2 + max_search
+    alignment_2 = align_layer(layer_2, alignment_3, min_3, max_3)
+    alignment_1 = align_layer(layer_1, alignment_2, min_2, max_2)
+    alignment_0 = align_layer(layer_0, alignment_1, min_1, max_1)
 
-        # initial alignment of previous layer is 0, 0
-        alignment_3 = Point(0, 0)
+    num_tx = images.width() / T_SIZE_2 - 1
+    num_ty = images.height() / T_SIZE_2 - 1
 
-        # Hierarchical alignment functions
-        alignment_2 = align_layer(pyramid[1], alignment_3, min_3, max_3)
-        alignment_1 = align_layer(pyramid[2], alignment_2, min_2, max_2)
-        alignment_0 = align_layer(pyramid[3], alignment_1, min_1, max_1)
-        
-        # TODO
-    
+    alignment[tx, ty, n] = 2 * Point(alignment_0(tx, ty, n))
+
+    alignment_repeat = hl.BoundaryConditions.repeat_edge(alignment, 0, num_tx, 0, num_ty)
+
     print(f'Alignment finished in {time_diff(start)} ms.\n')
-    return images
+    return alignment_repeat
