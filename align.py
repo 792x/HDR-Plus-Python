@@ -25,24 +25,11 @@ def sharpness(image):
     # The higher the value, the sharper the image
     return cv.Laplacian(image, cv.CV_64F).var()
 
-
-'''
-Downsample an image by a factor of 2 in width and height
-
-image : numpy.ndarray
-    The image to be downsampled
-
-Returns: numpy.ndarray
-'''
-def downsample(image):
-    return cv.resize(image, None, fx=0.5, fy=0.5)
-
-
 def gauss_down4(input, name):
     output = hl.Func(name)
     k = hl.Func(name + "_filter")
     x, y, n = hl.Var("x"), hl.Var("y"), hl.Var('n')
-    r = hl.RDom(-2, 5, -2, 5)
+    r = hl.RDom([(-2, 5), (-2, 5)])
 
     k[x, y] = 0
     k[-2, -2] = 2
@@ -52,7 +39,7 @@ def gauss_down4(input, name):
     k[2, -2] = 2
     k[-2, -1] = 4
     k[-1, -1] = 9
-    k[0,-1] = 12
+    k[0, -1] = 12
     k[1, -1] = 9
     k[2, -1] = 4
     k[-2, 0] = 5
@@ -71,7 +58,8 @@ def gauss_down4(input, name):
     k[1, 2] = 4
     k[2, 2] = 2
 
-    output[x, y, n] = hl.u16(sum(hl.u32(input[4*x + r.x, 4*y + r.y, n] * k[r.x, r.y])) / 159)
+    output[x, y, n] = hl.cast(hl.UInt(16), hl.sum(hl.cast(hl.UInt(32), input[4*x + r.x, 4*y + r.y, n] * k[r.x, r.y]))
+                              / 159)
 
     k.compute_root().parallel(y).parallel(x)
     output.compute_root().parallel(y).vectorize(x, 16)
@@ -82,16 +70,18 @@ def box_down2(input, name):
     output = hl.Func(name)
 
     x, y, n = hl.Var("x"), hl.Var("y"), hl.Var('n')
-    r = hl.RDom(0, 2, 0, 2)
+    r = hl.RDom([(0, 2), (0, 2)])
 
-    output[x, y, n] = hl.u16(sum(hl.u32(input[2 * x + r.x, 2 * y + r.y, n])) / 4)
+    output[x, y, n] = hl.cast(hl.UInt(16), hl.sum(hl.cast(hl.UInt(32), input[2 * x + r.x, 2 * y + r.y, n])) / 4)
 
     output.compute_root().parallel(y).vectorize(x, 16)
 
     return output
 
+
 def prev_tile(t):
-    return (t - 1)/DOWNSAMPLE_RATE
+    return (t - 1) / DOWNSAMPLE_RATE
+
 
 def idx_layer(t, i):
     return t * T_SIZE_2 / 2 + i
@@ -116,10 +106,10 @@ def align_layer(layer, prev_alignment, prev_min, prev_max):
     scores = hl.Func(layer.name() + "_scores")
     alignment = hl.Func(layer.name() + "_alignment")
     xi, yi, tx, ty, n = hl.Var("xi"), hl.Var("yi"), hl.Var('tx'),  hl.Var('ty'),  hl.Var('n')
-    r0 = hl.RDom(0, 16, 0, 16)
-    r1 = hl.RDom(-4, 8, -4, 8)
+    r0 = hl.RDom([(0, 16), (0, 16)])
+    r1 = hl.RDom([(-4, 8), (-4, 8)])
 
-    prev_offset = DOWNSAMPLE_RATE * hl.clamp(Point(prev_alignment(prev_tile(tx), prev_tile(ty), n)), prev_min, prev_max)
+    prev_offset = DOWNSAMPLE_RATE * hl.clamp(Point(prev_alignment[prev_tile(tx), prev_tile(ty), n], prev_min, prev_max))
 
     x0 = idx_layer(tx, r0.x)
     y0 = idx_layer(ty, r0.y)
@@ -129,9 +119,9 @@ def align_layer(layer, prev_alignment, prev_min, prev_max):
     ref_val = layer(x0, y0, 0)
     alt_val = layer(x, y, n)
 
-    dist = abs(hl.i32(ref_val) - hl.i32(alt_val))
+    dist = hl.abs(hl.cast(hl.UInt(32), ref_val) - hl.cast(hl.UInt(32), alt_val))
 
-    scores[xi, yi, tx, ty, n] = sum(dist)
+    scores[xi, yi, tx, ty, n] = hl.sum(dist)
 
     alignment[tx, ty, n] = Point(hl.argmin(scores[r1.x, r1.y, tx, ty, n])) + prev_offset
 
@@ -157,14 +147,11 @@ def align_images(images):
 
     alignment_3 = hl.Func("layer_3_alignment")
     alignment = hl.Func("alignment")
-    imgs_mirror = hl.Func("imgs_mirror")
-    layer_0 = hl.Func("layer_0")
-    layer_1 = hl.Func("layer_1")
-    layer_2 = hl.Func("layer_2")
-
     tx, ty, n = hl.Var('tx'), hl.Var('ty'), hl.Var('n')
 
-    imgs_mirror = hl.BoundaryConditions.mirror_interior(images, 0, images[0].width(), 0, images[0].height())
+    print('Subsampling image layers...')
+
+    imgs_mirror = hl.BoundaryConditions.mirror_interior(images, [(0, images.width()), (0, images.height())])
     layer_0 = box_down2(imgs_mirror, "layer_0")
     layer_1 = gauss_down4(layer_0, "layer_1")
     layer_2 = gauss_down4(layer_1, "layer_2")
@@ -180,6 +167,7 @@ def align_images(images):
     max_2 = DOWNSAMPLE_RATE * max_3 + max_search
     max_1 = DOWNSAMPLE_RATE * max_2 + max_search
 
+    print('Aligning layers...')
     alignment_3[tx, ty, n] = Point(0, 0)
 
     alignment_2 = align_layer(layer_2, alignment_3, min_3, max_3)
@@ -189,7 +177,7 @@ def align_images(images):
     num_tx = images.width() / T_SIZE_2 - 1
     num_ty = images.height() / T_SIZE_2 - 1
 
-    alignment[tx, ty, n] = 2 * Point(alignment_0(tx, ty, n))
+    alignment[tx, ty, n] = 2 * Point(alignment_0[tx, ty, n])
 
     alignment_repeat = hl.BoundaryConditions.repeat_edge(alignment, 0, num_tx, 0, num_ty)
 

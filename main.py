@@ -86,15 +86,23 @@ def load_images(burst_path):
     for image in p.imap(load_image, paths):
         images.append(hl.Buffer(image))
 
+    assert len(images) >= 2, "Burst must consist of at least 2 images"
+
     # Get a reference image to compare results
     print('Getting reference image...')
     with rawpy.imread(paths[0]) as raw:
         ref_img = raw.postprocess()
 
+    print('Building image buffer...')
+    result = hl.Buffer(hl.Int(16), [images[0].width(), images[0].height(), len(images)])
+    for index, image in enumerate(images):
+        print(index)
+        resultSlice = result.sliced(2, index)
+        print(resultSlice)
+        resultSlice.copy_from(image)
+
     print(f'Loading finished in {time_diff(start)} ms.\n')
-
-
-    return images, ref_img
+    return result, ref_img
 
 
 '''
@@ -113,8 +121,7 @@ def HDR(burst_path, black_point, white_point, white_balance, compression, gain):
         images, ref_img = load_images(burst_path)
 
         # dimensions of image should be 3
-        print(images[0].dimensions())
-        # length should be 2+
+        assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"
 
         # Save the reference image
         imageio.imsave('Output/input.jpg', ref_img)
@@ -129,11 +136,11 @@ def HDR(burst_path, black_point, white_point, white_balance, compression, gain):
         # finished = finish_image(merged, width, height, black_point, white_point, white_balance, compression, gain)
 
         # TODO: replace with finished image rather than brighter
-        brighter = hl.Func("brighter")
-        x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
-        brighter[x, y, c] = hl.cast(hl.UInt(8), hl.min(images[0][x, y, c] * 1.5, 255))
-        output_image = brighter.realize(images[0].width(), images[0].height(), images[0].channels())
-        imageio.imsave('Output/output.jpg', output_image)
+        # brighter = hl.Func("brighter")
+        # x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+        # brighter[x, y, c] = hl.cast(hl.UInt(8), hl.min(images[0][x, y, c] * 1.5, 255))
+        # output_image = brighter.realize(images[0].width(), images[0].height(), images[0].channels())
+        # imageio.imsave('Output/output.jpg', output_image)
 
         print(f'Processed in: {time_diff(start)} ms')
 
