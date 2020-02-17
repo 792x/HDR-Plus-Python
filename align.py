@@ -86,6 +86,8 @@ def prev_tile(t):
 def idx_layer(t, i):
     return t * T_SIZE_2 / 2 + i
 
+def clamp(p, min_p, max_p):
+    return Point(hl.clamp(p.x, min_p.x, max_p.x), hl.clamp(p.y, min_p.y, max_p.y))
 '''
 Determines the best offset for tiles of the image at a given resolution, 
 provided the offsets for the layer above
@@ -102,24 +104,23 @@ prev_max : Point
 Returns: Point
 '''
 def align_layer(layer, prev_alignment, prev_min, prev_max):
-
     scores = hl.Func(layer.name() + "_scores")
     alignment = hl.Func(layer.name() + "_alignment")
     xi, yi, tx, ty, n = hl.Var("xi"), hl.Var("yi"), hl.Var('tx'),  hl.Var('ty'),  hl.Var('n')
     r0 = hl.RDom([(0, 16), (0, 16)])
     r1 = hl.RDom([(-4, 8), (-4, 8)])
 
-    prev_offset = DOWNSAMPLE_RATE * hl.clamp(Point(prev_alignment[prev_tile(tx), prev_tile(ty), n], prev_min, prev_max))
+    prev_offset = DOWNSAMPLE_RATE * clamp(Point(prev_alignment[prev_tile(tx), prev_tile(ty), n]), prev_min, prev_max)
 
     x0 = idx_layer(tx, r0.x)
     y0 = idx_layer(ty, r0.y)
     x = x0 + prev_offset.x + xi
     y = y0 + prev_offset.y + yi
 
-    ref_val = layer(x0, y0, 0)
-    alt_val = layer(x, y, n)
+    ref_val = layer[x0, y0, 0]
+    alt_val = layer[x, y, n]
 
-    dist = hl.abs(hl.cast(hl.UInt(32), ref_val) - hl.cast(hl.UInt(32), alt_val))
+    dist = hl.abs(hl.cast(hl.Int(32), ref_val) - hl.cast(hl.Int(32), alt_val))
 
     scores[xi, yi, tx, ty, n] = hl.sum(dist)
 
@@ -167,8 +168,9 @@ def align_images(images):
     max_2 = DOWNSAMPLE_RATE * max_3 + max_search
     max_1 = DOWNSAMPLE_RATE * max_2 + max_search
 
+
+
     print('Aligning layers...')
-    # TODO: fix
     alignment_3[tx, ty, n] = Point(0, 0)
 
     alignment_2 = align_layer(layer_2, alignment_3, min_3, max_3)
@@ -177,10 +179,11 @@ def align_images(images):
 
     num_tx = images.width() / T_SIZE_2 - 1
     num_ty = images.height() / T_SIZE_2 - 1
-
     alignment[tx, ty, n] = 2 * Point(alignment_0[tx, ty, n])
 
-    alignment_repeat = hl.BoundaryConditions.repeat_edge(alignment, 0, num_tx, 0, num_ty)
+
+    # TODO: fix this
+    alignment_repeat = hl.BoundaryConditions.repeat_edge(alignment, [(0, num_tx), (0, num_ty)])
 
     print(f'Alignment finished in {time_diff(start)} ms.\n')
     return alignment_repeat
