@@ -168,6 +168,7 @@ def align_images(images):
     max_1 = DOWNSAMPLE_RATE * max_2 + max_search
 
     print('Aligning layers...')
+    # TODO: fix
     alignment_3[tx, ty, n] = Point(0, 0)
 
     alignment_2 = align_layer(layer_2, alignment_3, min_3, max_3)
