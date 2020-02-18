@@ -25,11 +25,13 @@ Downsample an image by a factor of 2 in width and height
 
 image : numpy.ndarray
     The image to be downsampled
+ratio : float
+    Downsample ratio
 
 Returns: numpy.ndarray
 '''
-def downsample(image):
-    return cv.resize(image, None, fx=0.5, fy=0.5)
+def downsample(image, ratio):
+    return cv.resize(image, None, fx=ratio, fy=ratio)
 
 
 '''
@@ -92,10 +94,11 @@ def align_images(images, grayscale):
     # Downsample grayscale images
     # Average 2 x 2 blocks
     print('Downsampling grayscale images...')
+    downsample_ratio = 0.5
     downsampled_grayscale = []
     for image in grayscale:
-        downsampled_grayscale.append(downsample(image))
-    reference_downsampled_grayscale = downsample(reference_grayscale)
+        downsampled_grayscale.append(downsample(image, downsample_ratio))
+    reference_downsampled_grayscale = downsample(reference_grayscale, downsample_ratio)
 
     # Hierarchical alignment
     for image in downsampled_grayscale:

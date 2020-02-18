@@ -8,7 +8,7 @@ import sys
 import multiprocessing
 from datetime import datetime
 
-os.environ['KIVY_NO_CONSOLELOG'] = '1'
+os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line if debugging UI
 import kivy
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
@@ -17,6 +17,8 @@ from kivy.properties import ObjectProperty
 from kivy.uix.popup import Popup
 from kivy.uix.image import Image
 from kivy.logger import Logger
+from kivy.uix.label import Label
+from kivy.uix.button import Button
 
 from utils import time_diff
 
@@ -77,7 +79,7 @@ def load_images(burst_path):
             paths.append(file_path)
         else:
             if i == 0:
-                raise ValueError
+                raise ValueError('Burst format not recognized.')
             break
     
     # Load raw images
@@ -110,36 +112,29 @@ burst_path : str
 Returns: str, str (paths to the reference and HDR images, respectively)
 '''
 def HDR(burst_path):
-    try:
-        start = datetime.utcnow()
+    start = datetime.utcnow()
 
-        # Load the images
-        images, grayscale, ref_img = load_images(burst_path)
+    # Load the images
+    images, grayscale, ref_img = load_images(burst_path)
 
-        # Save the reference image
-        imageio.imsave('Output/input.jpg', ref_img)
+    # Save the reference image
+    imageio.imsave('Output/input.jpg', ref_img)
 
-        # Align the images
-        images = align_images(images, grayscale)
+    # Align the images
+    images = align_images(images, grayscale)
 
-        # Merge the images
-        image = merge_images(images)
+    # Merge the images
+    image = merge_images(images)
 
-        # Finish the image
-        image = finish_image(image)
+    # Finish the image
+    image = finish_image(image)
 
-        # Save the HDR image
-        imageio.imsave('Output/output.jpg', image)
+    # Save the HDR image
+    imageio.imsave('Output/output.jpg', image)
 
-        print(f'Processed in: {time_diff(start)} ms')
+    print(f'Processed in: {time_diff(start)} ms')
 
-        return 'Output/input.jpg', 'Output/output.jpg'
-
-    except Exception as e:
-        print(e)
-        # On error, return the empty gallery images
-        return 'Images/gallery.jpg', 'Images/gallery.jpg'
-
+    return 'Output/input.jpg', 'Output/output.jpg'
 
 class Imglayout(FloatLayout):
     def __init__(self,**args):
@@ -171,6 +166,8 @@ class Root(FloatLayout):
     # Path to the burst images
     path = ''
 
+    cancel = False
+
     def build():
         c = Imglayout()
         root.add_widget(c)
@@ -181,13 +178,28 @@ class Root(FloatLayout):
     def show_load(self):
         # Function to call the HDR+ pipeline
         def HDR_callback(instance):
-            original_path, image_path = HDR(self.path)
-            self.original = original_path
-            self.image = image_path
-            self.ids.image0.source = self.original
-            self.ids.image0.reload()
-            self.ids.image1.source = self.image
-            self.ids.image1.reload()
+            try:
+                original_path, image_path = HDR(self.path)
+                self.original = original_path
+                self.image = image_path
+                self.ids.image0.source = self.original
+                self.ids.image0.reload()
+                self.ids.image1.source = self.image
+                self.ids.image1.reload()
+            except Exception as e:
+                if not self.cancel:
+                    float_popup = FloatLayout(size_hint = (0.9, 0.4))
+                    float_popup.add_widget(Label(text=f'{e}',
+                                                 size_hint = (0.7, 1),
+                                                 pos_hint = {'x': 0.15, 'y': 1}))
+                    float_popup.add_widget(Button(text = 'Close',
+                                                  on_press = lambda *args: popup.dismiss(),
+                                                  size_hint = (0.2, 0.3),
+                                                  pos_hint = {'x': 0.4, 'y': 0}))
+                    popup = Popup(title = 'Error',
+                                  content = float_popup,
+                                  size_hint = (0.9, 0.4))
+                    popup.open()
 
         content = LoadDialog(load=self.load, cancel=self.dismiss_popup)
         self._popup = Popup(title="Select burst image", content=content,
@@ -201,7 +213,11 @@ class Root(FloatLayout):
     def load(self, path, filename):
         # Set the path to the burst images
         self.path = path
-        
+        self.cancel = False
+        self.dismiss_popup()
+    
+    def cancel(self):
+        self.cancel = True
         self.dismiss_popup()
 
 
