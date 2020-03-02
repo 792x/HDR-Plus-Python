@@ -122,7 +122,7 @@ def HDR(burst_path, black_point, white_point, white_balance, compression, gain):
 
         # dimensions of image should be 3
         assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"
-
+        assert images.dim(2).extent() >= 2, f"Must have at least one alternate image"
         # Save the reference image
         imageio.imsave('Output/input.jpg', ref_img)
 
@@ -130,17 +130,14 @@ def HDR(burst_path, black_point, white_point, white_balance, compression, gain):
         alignment = align_images(images)
 
         # Merge the images
-        # merged = merge_images(imgs, alignment)
+        merged = merge_images(images, alignment)
 
         # Finish the image
-        # finished = finish_image(merged, width, height, black_point, white_point, white_balance, compression, gain)
+        finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance, compression, gain)
 
-        # TODO: replace with finished image rather than brighter
-        # brighter = hl.Func("brighter")
-        # x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
-        # brighter[x, y, c] = hl.cast(hl.UInt(8), hl.min(images[0][x, y, c] * 1.5, 255))
-        # output_image = brighter.realize(images[0].width(), images[0].height(), images[0].channels())
-        # imageio.imsave('Output/output.jpg', output_image)
+        result = finished.realize(images.width(), images.height(), 3)
+
+        imageio.imsave('Output/output.jpg', result)
 
         print(f'Processed in: {time_diff(start)} ms')
 

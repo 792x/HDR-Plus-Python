@@ -1,3 +1,5 @@
+import math
+
 import cv2 as cv
 import numpy as np
 from datetime import datetime
@@ -86,8 +88,21 @@ def prev_tile(t):
 def idx_layer(t, i):
     return t * T_SIZE_2 / 2 + i
 
-def clamp(p, min_p, max_p):
-    return Point(hl.clamp(p.x, min_p.x, max_p.x), hl.clamp(p.y, min_p.y, max_p.y))
+def idx_im(t, i):
+    return t * T_SIZE_2 + i
+
+def idx_0(e):
+    return e % T_SIZE_2 + T_SIZE_2
+
+def idx_1(e):
+    return e % T_SIZE_2
+
+def tile_0(e):
+    return e / T_SIZE_2 - 1
+
+def tile_1(e):
+    return e / T_SIZE_2
+
 '''
 Determines the best offset for tiles of the image at a given resolution, 
 provided the offsets for the layer above
@@ -110,7 +125,7 @@ def align_layer(layer, prev_alignment, prev_min, prev_max):
     r0 = hl.RDom([(0, 16), (0, 16)])
     r1 = hl.RDom([(-4, 8), (-4, 8)])
 
-    prev_offset = DOWNSAMPLE_RATE * clamp(Point(prev_alignment[prev_tile(tx), prev_tile(ty), n]), prev_min, prev_max)
+    prev_offset = DOWNSAMPLE_RATE * Point(prev_alignment[prev_tile(tx), prev_tile(ty), n]).clamp(prev_min, prev_max)
 
     x0 = idx_layer(tx, r0.x)
     y0 = idx_layer(ty, r0.y)
@@ -148,10 +163,10 @@ def align_images(images):
 
     alignment_3 = hl.Func("layer_3_alignment")
     alignment = hl.Func("alignment")
+
     tx, ty, n = hl.Var('tx'), hl.Var('ty'), hl.Var('n')
 
     print('Subsampling image layers...')
-
     imgs_mirror = hl.BoundaryConditions.mirror_interior(images, [(0, images.width()), (0, images.height())])
     layer_0 = box_down2(imgs_mirror, "layer_0")
     layer_1 = gauss_down4(layer_0, "layer_1")
@@ -168,8 +183,6 @@ def align_images(images):
     max_2 = DOWNSAMPLE_RATE * max_3 + max_search
     max_1 = DOWNSAMPLE_RATE * max_2 + max_search
 
-
-
     print('Aligning layers...')
     alignment_3[tx, ty, n] = Point(0, 0)
 
@@ -177,12 +190,12 @@ def align_images(images):
     alignment_1 = align_layer(layer_1, alignment_2, min_2, max_2)
     alignment_0 = align_layer(layer_0, alignment_1, min_1, max_1)
 
-    num_tx = images.width() / T_SIZE_2 - 1
-    num_ty = images.height() / T_SIZE_2 - 1
+    num_tx = math.floor(images.width() / T_SIZE_2 - 1)
+    num_ty = math.floor(images.height() / T_SIZE_2 - 1)
+
+    print(images.height())
     alignment[tx, ty, n] = 2 * Point(alignment_0[tx, ty, n])
 
-
-    # TODO: fix this
     alignment_repeat = hl.BoundaryConditions.repeat_edge(alignment, [(0, num_tx), (0, num_ty)])
 
     print(f'Alignment finished in {time_diff(start)} ms.\n')

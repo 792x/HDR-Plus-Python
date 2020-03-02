@@ -27,13 +27,10 @@ y : float
 """
 class Point:
     def __init__(self, x=None, y=None):
-        print('making new Point')
-        print(x, y)
         if x is None and y is None:
             self.x = hl.cast(hl.Int(16), 0)
             self.y = hl.cast(hl.Int(16), 0)
         elif x is not None and y is None:
-            print(type(x))
             if type(x) is hl.FuncRef:
                 hl.Tuple(x)
                 self.x = hl.cast(hl.Int(16), x[0])
@@ -45,11 +42,11 @@ class Point:
             self.x = hl.cast(hl.Int(16), x)
             self.y = hl.cast(hl.Int(16), y)
 
-        print('made new point')
-        print(self.x, self.y)
-
     def get_tuple(self):
         return self.x, self.y
+
+    def clamp(self, min_p, max_p):
+        return Point(hl.clamp(self.x, min_p.x, max_p.x), hl.clamp(self.y, min_p.y, max_p.y))
 
     def __len__(self):
         return 2
