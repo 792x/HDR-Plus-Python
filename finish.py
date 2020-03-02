@@ -6,6 +6,41 @@ from datetime import datetime
 
 from utils import time_diff
 
+DENOISE_PASSES = 1
+CONTRAST_STRENGTH = 5
+BLACK_LEVEL = 2000
+SHARPEN_STRENGTH = 2
+
+
+def black_white_level(input, black_point, white_point):
+    output = hl.Func("black_white_level_output")
+
+    x, y = hl.Var("x"), hl.Var("y")
+
+    white_factor = 65535 / (white_point - black_point)
+
+    output[x, y] = hl.u16_sat((hl.cast(hl.Int(32), input[x, y]) - black_point) * white_factor)
+
+    return output
+
+
+def white_balance(input, width, height, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b):
+    output = hl.Func("white_balance_output")
+
+    x, y = hl.Var("x"), hl.Var("y")
+
+    r = hl.RDom([(0, width / 2), (0, height / 2)])
+
+    output[x, y] = hl.u16(0)
+
+    output[r.x * 2, r.y * 2] = hl.u16_sat(white_balance_r * hl.cast(hl.Float(32), input[r.x * 2, r.y * 2]))
+    output[r.x * 2 + 1, r.y * 2] = hl.u16_sat(white_balance_g0 * hl.cast(hl.Float(32), input[r.x * 2 + 1, r.y * 2]))
+    output[r.x * 2, r.y * 2 + 1] = hl.u16_sat(white_balance_g1 * hl.cast(hl.Float(32), input[r.x * 2, r.y * 2 + 1]))
+    output[r.x * 2 + 1, r.y * 2 + 1] = hl.u16_sat(
+        white_balance_b * hl.cast(hl.Float(32), input[r.x * 2 + 1, r.y * 2 + 1]))
+
+    return output
+
 
 def demosaic(input, width, height):
     f0 = hl.Func("demosaic_f0")
@@ -39,11 +74,11 @@ def demosaic(input, width, height):
     f0[0, -1] = 2
     f0[-2, 0] = -1
     f0[-1, 0] = 2
-    f0[0,  0] = 4
+    f0[0, 0] = 4
     f0[1, 0] = 2
     f0[2, 0] = -1
-    f0[0,  1] = 2
-    f0[0,  2] = -1
+    f0[0, 1] = 2
+    f0[0, 2] = -1
 
     f1[0, -2] = 1
     f1[-1, -1] = -2
@@ -132,6 +167,7 @@ def u8bit_interleaved(input):
 
     return output
 
+
 '''
 Step 3 of HDR+ pipeline: finish
 
@@ -140,13 +176,34 @@ image : numpy ndarray
 
 Returns: numpy ndarray (finished image)
 '''
-def finish_image(imgs, width, height, black_point, white_point, white_balance, compression, gain):
-    print(f'\n{"="*30}\nFinishing image...\n{"="*30}')
+
+
+def finish_image(imgs, width, height, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
+                 white_balance_b, compression, gain):
+    print(f'\n{"=" * 30}\nFinishing image...\n{"=" * 30}')
     start = datetime.utcnow()
 
-    # TODO
+
+
+    # black_white_level_output = black_white_level(imgs, black_point, white_point)
+    #
+    # white_balance_output = white_balance(imgs, width, height, white_balance_r, white_balance_g0,
+    #                                      white_balance_g1, white_balance_b)
 
     demosaic_output = demosaic(imgs, width, height)
+
+    # TODO
+    # chroma_denoised_output = chroma_denoise(demosaic_output, width, height, denoise_passes)
+    #
+    # srgb_output = srgb(demosaic_output)
+    #
+    # tone_map_output = tone_map(srgb_output, width, height, compression, gain)
+    #
+    # gamma_correct_output = gamma_correct(tone_map_output)
+    #
+    # contrast_output = contrast(gamma_correct_output, contrast_strength, black_level)
+    #
+    # sharpen_output = sharpen(contrast_output, sharpen_strength)
 
     u8bit_interleaved_output = u8bit_interleaved(demosaic_output)
 

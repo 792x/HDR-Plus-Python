@@ -113,12 +113,21 @@ burst_path : str
 
 Returns: str, str (paths to the reference and HDR images, respectively)
 '''
-def HDR(burst_path, black_point, white_point, white_balance, compression, gain):
+def HDR(burst_path, compression, gain):
     try:
         start = datetime.utcnow()
 
         # Load the images
         images, ref_img = load_images(burst_path)
+
+
+        # TODO: get these from file
+        black_point = 0
+        white_point = 0
+        white_balance_r = 0
+        white_balance_g0 = 0
+        white_balance_g1 = 0
+        white_balance_b = 0
 
         # dimensions of image should be 3
         assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"
@@ -133,7 +142,7 @@ def HDR(burst_path, black_point, white_point, white_balance, compression, gain):
         merged = merge_images(images, alignment)
 
         # Finish the image
-        finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance, compression, gain)
+        finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain)
 
         result = finished.realize(images.width(), images.height(), 3)
 
@@ -189,7 +198,7 @@ class Root(FloatLayout):
     def show_load(self):
         # Function to call the HDR+ pipeline
         def HDR_callback(instance):
-            original_path, image_path = HDR(self.path, 0, 0, 0, 0, 0)
+            original_path, image_path = HDR(self.path, 0, 0)
             self.original = original_path
             self.image = image_path
             self.ids.image0.source = self.original
