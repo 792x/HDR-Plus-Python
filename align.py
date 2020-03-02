@@ -193,7 +193,6 @@ def align_images(images):
     num_tx = math.floor(images.width() / T_SIZE_2 - 1)
     num_ty = math.floor(images.height() / T_SIZE_2 - 1)
 
-    print(images.height())
     alignment[tx, ty, n] = 2 * Point(alignment_0[tx, ty, n])
 
     alignment_repeat = hl.BoundaryConditions.repeat_edge(alignment, [(0, num_tx), (0, num_ty)])

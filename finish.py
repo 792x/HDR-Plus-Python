@@ -39,6 +39,13 @@ def white_balance(input, width, height, white_balance_r, white_balance_g0, white
     output[r.x * 2 + 1, r.y * 2 + 1] = hl.u16_sat(
         white_balance_b * hl.cast(hl.Float(32), input[r.x * 2 + 1, r.y * 2 + 1]))
 
+    output.compute_root().parallel(y).vectorize(x, 16)
+
+    output.update(0).parallel(r.y)
+    output.update(1).parallel(r.y)
+    output.update(2).parallel(r.y)
+    output.update(3).parallel(r.y)
+
     return output
 
 
@@ -155,6 +162,34 @@ def demosaic(input, width, height):
 
     return output
 
+def srgb(input):
+    srgb_matrix = hl.Func("srgb_matrix")
+    output = hl.Func("srgb_output")
+
+    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+
+    r = hl.RDom([(0, 3)])
+
+    srgb_matrix[x, y] = hl.f32(0)
+
+    srgb_matrix[0, 0] = hl.f32(0.964399)
+    srgb_matrix[1, 0] = hl.f32(-1.119710)
+    srgb_matrix[2, 0] = hl.f32(0.155311)
+    srgb_matrix[0, 1] = hl.f32(-0.241156)
+    srgb_matrix[1, 1] = hl.f32(1.673722)
+    srgb_matrix[2, 1] = hl.f32(-0.432566)
+    srgb_matrix[0, 2] = hl.f32(0.013887)
+    srgb_matrix[1, 2] = hl.f32(-0.549820)
+    srgb_matrix[2, 2] = hl.f32(1.535933)
+
+    output[x, y, c] = hl.u16_sat(hl.sum(srgb_matrix[r, c] * input[x, y, r]))
+
+    srgb_matrix.compute_root().parallel(y).parallel(x)
+
+    return output
+
+def tone_map(input):
+    pass
 
 def u8bit_interleaved(input):
     output = hl.Func("8bit_interleaved_output")
@@ -184,19 +219,22 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     start = datetime.utcnow()
 
 
+    print("black_white_level")
+    black_white_level_output = black_white_level(imgs, black_point, white_point)
 
-    # black_white_level_output = black_white_level(imgs, black_point, white_point)
-    #
-    # white_balance_output = white_balance(imgs, width, height, white_balance_r, white_balance_g0,
-    #                                      white_balance_g1, white_balance_b)
-
-    demosaic_output = demosaic(imgs, width, height)
+    print("white_balance")
+    white_balance_output = white_balance(black_white_level_output, width, height, white_balance_r, white_balance_g0,
+                                         white_balance_g1, white_balance_b)
+    print("demosaic")
+    demosaic_output = demosaic(white_balance_output, width, height)
 
     # TODO
     # chroma_denoised_output = chroma_denoise(demosaic_output, width, height, denoise_passes)
-    #
-    # srgb_output = srgb(demosaic_output)
-    #
+
+    print("srgb")
+    srgb_output = srgb(demosaic_output)
+
+    # print("tone_map")
     # tone_map_output = tone_map(srgb_output, width, height, compression, gain)
     #
     # gamma_correct_output = gamma_correct(tone_map_output)
@@ -205,7 +243,7 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     #
     # sharpen_output = sharpen(contrast_output, sharpen_strength)
 
-    u8bit_interleaved_output = u8bit_interleaved(demosaic_output)
+    u8bit_interleaved_output = u8bit_interleaved(srgb_output)
 
     print(f'Finishing finished in {time_diff(start)} ms.\n')
     return u8bit_interleaved_output

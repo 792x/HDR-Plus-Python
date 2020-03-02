@@ -64,7 +64,13 @@ def load_images(burst_path):
     print(f'\n{"="*30}\nLoading images...\n{"="*30}')
     start = datetime.utcnow()
     images = []
-    
+    white_balance_r = 0
+    white_balance_g0 = 0
+    white_balance_g1 = 0
+    white_balance_b = 0
+    black_point = 0
+    white_point = 0
+
     # Create list of paths to the images
     paths = []
     for i in range(100):
@@ -91,18 +97,23 @@ def load_images(burst_path):
     # Get a reference image to compare results
     print('Getting reference image...')
     with rawpy.imread(paths[0]) as raw:
+        white_balance = raw.camera_whitebalance
+        white_balance_r = white_balance[0]
+        white_balance_g0 = white_balance[1]
+        white_balance_g1 = white_balance[2]
+        white_balance_b = white_balance[3]
+        black_point = raw.black_level
+        white_point = raw.white_level
         ref_img = raw.postprocess()
 
     print('Building image buffer...')
     result = hl.Buffer(hl.Int(16), [images[0].width(), images[0].height(), len(images)])
     for index, image in enumerate(images):
-        print(index)
         resultSlice = result.sliced(2, index)
-        print(resultSlice)
         resultSlice.copy_from(image)
 
     print(f'Loading finished in {time_diff(start)} ms.\n')
-    return result, ref_img
+    return result, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point
 
 
 '''
@@ -118,16 +129,7 @@ def HDR(burst_path, compression, gain):
         start = datetime.utcnow()
 
         # Load the images
-        images, ref_img = load_images(burst_path)
-
-
-        # TODO: get these from file
-        black_point = 0
-        white_point = 0
-        white_balance_r = 0
-        white_balance_g0 = 0
-        white_balance_g1 = 0
-        white_balance_b = 0
+        images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point = load_images(burst_path)
 
         # dimensions of image should be 3
         assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"

@@ -1,6 +1,6 @@
 numpy==1.17.4
 opencv-python==4.2.0.32
-rawpy==0.14.0
+git+https://github.com/caspertjuh/rawpy.git
 imageio==2.6.1
 kivy==1.11.1
 docutils==0.16
