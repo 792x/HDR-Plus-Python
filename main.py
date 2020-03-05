@@ -200,7 +200,8 @@ class Root(FloatLayout):
     def show_load(self):
         # Function to call the HDR+ pipeline
         def HDR_callback(instance):
-            original_path, image_path = HDR(self.path, 0, 0)
+            # Default values for compression and gain
+            original_path, image_path = HDR(self.path, 3.8, 1.1)
             self.original = original_path
             self.image = image_path
             self.ids.image0.source = self.original

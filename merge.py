@@ -89,7 +89,7 @@ def merge_spatial(input):
     val_01 = input[idx_0(x), idx_1(y), tile_0(x), tile_1(y)]
     val_11 = input[idx_1(x), idx_1(y), tile_1(x), tile_1(y)]
 
-    output[x, y] = hl.u16(weight_00 * val_00
+    output[x, y] = hl.cast(hl.UInt(16), weight_00 * val_00
                      + weight_10 * val_10
                      + weight_01 * val_01
                      + weight_11 * val_11)
