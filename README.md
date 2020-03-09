@@ -9,8 +9,12 @@ To download the subset of bursts used in this project, download the [Google Clou
 gsutil -m cp -r gs://hdrplusdata/20171106_subset .
 ```
 
-## Setup (Windows)
+## Setup (MacOS / Ubuntu)
 
-Run `install_requirements.bat`
+### Prerequisites
 
-Run `run.bat`
+* [LLVM](http://llvm.org/releases/download.html)
+* [Halide](https://github.com/halide/Halide)
+* [python_bindings](https://github.com/halide/Halide/tree/master/python_bindings)
+
+`pip install -r requirements.txt`
