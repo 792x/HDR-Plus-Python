@@ -9,7 +9,7 @@ import multiprocessing
 import halide as hl
 from datetime import datetime
 
-os.environ['KIVY_NO_CONSOLELOG'] = '1'
+# os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line if debugging UI
 import kivy
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
@@ -18,6 +18,8 @@ from kivy.properties import ObjectProperty
 from kivy.uix.popup import Popup
 from kivy.uix.image import Image
 from kivy.logger import Logger
+from kivy.uix.label import Label
+from kivy.uix.button import Button
 
 from utils import time_diff
 
@@ -83,7 +85,7 @@ def load_images(burst_path):
             paths.append(file_path)
         else:
             if i == 0:
-                raise ValueError
+                raise ValueError("Burst format not recognized.")
             break
     
     # Load raw images
@@ -125,39 +127,33 @@ burst_path : str
 Returns: str, str (paths to the reference and HDR images, respectively)
 '''
 def HDR(burst_path, compression, gain):
-    try:
-        start = datetime.utcnow()
+    start = datetime.utcnow()
 
-        # Load the images
-        images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point = load_images(burst_path)
+    # Load the images
+    images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point = load_images(burst_path)
 
-        # dimensions of image should be 3
-        assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"
-        assert images.dim(2).extent() >= 2, f"Must have at least one alternate image"
-        # Save the reference image
-        imageio.imsave('Output/input.jpg', ref_img)
+    # dimensions of image should be 3
+    assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"
+    assert images.dim(2).extent() >= 2, f"Must have at least one alternate image"
+    # Save the reference image
+    imageio.imsave('Output/input.jpg', ref_img)
 
-        # Align the images
-        alignment = align_images(images)
+    # Align the images
+    alignment = align_images(images)
 
-        # Merge the images
-        merged = merge_images(images, alignment)
+    # Merge the images
+    merged = merge_images(images, alignment)
 
-        # Finish the image
-        finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain)
+    # Finish the image
+    finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain)
 
-        result = finished.realize(images.width(), images.height(), 3)
+    result = finished.realize(images.width(), images.height(), 3)
 
-        imageio.imsave('Output/output.jpg', result)
+    imageio.imsave('Output/output.jpg', result)
 
-        print(f'Processed in: {time_diff(start)} ms')
+    print(f'Processed in: {time_diff(start)} ms')
 
-        return 'Output/input.jpg', 'Output/output.jpg'
-
-    except Exception as e:
-        print(e)
-        # On error, return the empty gallery images
-        return 'Images/gallery.jpg', 'Images/gallery.jpg'
+    return 'Output/input.jpg', 'Output/output.jpg'
 
 
 class Imglayout(FloatLayout):
@@ -190,6 +186,8 @@ class Root(FloatLayout):
     # Path to the burst images
     path = ''
 
+    cancel = False
+
     def build():
         c = Imglayout()
         root.add_widget(c)
@@ -200,14 +198,29 @@ class Root(FloatLayout):
     def show_load(self):
         # Function to call the HDR+ pipeline
         def HDR_callback(instance):
-            # Default values for compression and gain
-            original_path, image_path = HDR(self.path, 3.8, 1.1)
-            self.original = original_path
-            self.image = image_path
-            self.ids.image0.source = self.original
-            self.ids.image0.reload()
-            self.ids.image1.source = self.image
-            self.ids.image1.reload()
+            try:
+                # Default values for compression and gain
+                original_path, image_path = HDR(self.path, 3.8, 1.1)
+                self.original = original_path
+                self.image = image_path
+                self.ids.image0.source = self.original
+                self.ids.image0.reload()
+                self.ids.image1.source = self.image
+                self.ids.image1.reload()
+            except Exception as e:
+                if not self.cancel:
+                    float_popup = FloatLayout(size_hint = (0.9, .04))
+                    float_popup.add_widget(Label(text=f'{e}',
+                                                 size_hint = (0.7, 1),
+                                                 pos_hint = {'x': 0.15, 'y': 12}))
+                    float_popup.add_widget(Button(text = 'Close',
+                                                  on_press = lambda *args: popup.dismiss(),
+                                                  size_hint = (0.2, 4),
+                                                  pos_hint = {'x': 0.4, 'y': 1}))
+                    popup = Popup(title = 'Error',
+                                  content = float_popup,
+                                  size_hint = (0.9, 0.4))
+                    popup.open()
 
         content = LoadDialog(load=self.load, cancel=self.dismiss_popup)
         self._popup = Popup(title="Select burst image", content=content,
@@ -221,7 +234,11 @@ class Root(FloatLayout):
     def load(self, path, filename):
         # Set the path to the burst images
         self.path = path
-        
+        self.cancel = False
+        self.dismiss_popup()
+    
+    def cancel(self):
+        self.cancel = True
         self.dismiss_popup()
 
 
