@@ -58,7 +58,7 @@ def merge_temporal(images, alignment):
     al_x = idx_im(tx, ix) + offset.x
     al_y = idx_im(ty, iy) + offset.y
 
-    ref_val = imgs_mirror[idx_im(tx, ix), idx_im(ty, iy), 0]
+    ref_val = hl.cast(hl.UInt(16), imgs_mirror[idx_im(tx, ix), idx_im(ty, iy), 0])
     alt_val = imgs_mirror[al_x, al_y, r1]
 
     output[ix, iy, tx, ty] = hl.sum(weight[tx, ty, r1] * alt_val / total_weight[tx, ty]) + ref_val / total_weight[tx, ty]
@@ -90,9 +90,9 @@ def merge_spatial(input):
     val_11 = input[idx_1(x), idx_1(y), tile_1(x), tile_1(y)]
 
     output[x, y] = hl.cast(hl.UInt(16), weight_00 * val_00
-                     + weight_10 * val_10
-                     + weight_01 * val_01
-                     + weight_11 * val_11)
+                                      + weight_10 * val_10
+                                      + weight_01 * val_01
+                                      + weight_11 * val_11)
 
     weight.compute_root().vectorize(v, 32)
 

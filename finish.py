@@ -438,8 +438,6 @@ image : numpy ndarray
 
 Returns: numpy ndarray (finished image)
 '''
-
-
 def finish_image(imgs, width, height, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
                  white_balance_b, compression, gain):
 

@@ -14,19 +14,6 @@ MIN_OFFSET = -168
 MAX_OFFSET = 126
 DOWNSAMPLE_RATE = 4
 
-'''
-Get a value representing the sharpness of an image
-
-image : numpy ndarray
-    The image for which to calculate the sharpness
-
-Returns: float
-'''
-def sharpness(image):
-    # Returns the average variance of the edges in an image
-    # The higher the value, the sharper the image
-    return cv.Laplacian(image, cv.CV_64F).var()
-
 def gauss_down4(input, name):
     output = hl.Func(name)
     k = hl.Func(name + "_filter")
