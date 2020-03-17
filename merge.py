@@ -4,6 +4,7 @@ from datetime import datetime
 import halide as hl
 from align import box_down2, idx_layer, idx_im, idx_0, idx_1, tile_0, tile_1, T_SIZE
 from utils import time_diff, Point
+import math
 
 MIN_OFFSET = -168    # Min total alignment (based on three levels and downsampling by 4)
 MAX_OFFSET = 126     # Max total alignment. Differs from MIN_OFFSET because total search range is 8 for better vectorization
@@ -76,8 +77,7 @@ def merge_spatial(input):
 
     v, x, y = hl.Var('v'), hl.Var('x'), hl.Var('y')
 
-    pi = 3.141592
-    weight[v] = 0.5 - 0.5 * hl.cos(2 * pi * (v + 0.5) / T_SIZE)
+    weight[v] = 0.5 - 0.5 * hl.cos(2 * math.pi * (v + 0.5) / T_SIZE)
 
     weight_00 = weight[idx_0(x)] * weight[idx_0(y)]
     weight_10 = weight[idx_1(x)] * weight[idx_0(y)]
@@ -114,5 +114,6 @@ def merge_images(images, alignment):
 
     merge_temporal_output = merge_temporal(images, alignment)
     merge_spatial_output = merge_spatial(merge_temporal_output)
+    
     print(f'Merging finished in {time_diff(start)} ms.\n')
     return merge_spatial_output

@@ -9,7 +9,7 @@ import multiprocessing
 import halide as hl
 from datetime import datetime
 
-# os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line if debugging UI
+os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line if debugging UI
 import kivy
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
@@ -209,8 +209,9 @@ class Root(FloatLayout):
                 self.ids.image1.reload()
             except Exception as e:
                 if not self.cancel:
+                    txt = '\n'.join(str(e)[i:i+80] for i in range(0, len(str(e)), 80))
                     float_popup = FloatLayout(size_hint = (0.9, .04))
-                    float_popup.add_widget(Label(text=f'{e}',
+                    float_popup.add_widget(Label(text=txt,
                                                  size_hint = (0.7, 1),
                                                  pos_hint = {'x': 0.15, 'y': 12}))
                     float_popup.add_widget(Button(text = 'Close',
