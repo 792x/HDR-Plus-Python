@@ -8,6 +8,7 @@ import sys
 import multiprocessing
 import halide as hl
 from datetime import datetime
+import traceback
 
 os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line if debugging UI
 import kivy
@@ -209,6 +210,7 @@ class Root(FloatLayout):
                 self.ids.image1.reload()
             except Exception as e:
                 if not self.cancel:
+                    print(traceback.format_exc())
                     txt = '\n'.join(str(e)[i:i+80] for i in range(0, len(str(e)), 80))
                     float_popup = FloatLayout(size_hint = (0.9, .04))
                     float_popup.add_widget(Label(text=txt,
