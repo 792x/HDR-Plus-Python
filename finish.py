@@ -36,11 +36,10 @@ def white_balance(input, width, height, white_balance_r, white_balance_g0, white
 
     output[x, y] = hl.u16(0)
 
-    output[r.x * 2, r.y * 2] = hl.u16_sat(white_balance_r * hl.cast(hl.Float(32), input[r.x * 2, r.y * 2]))
-    output[r.x * 2 + 1, r.y * 2] = hl.u16_sat(white_balance_g0 * hl.cast(hl.Float(32), input[r.x * 2 + 1, r.y * 2]))
-    output[r.x * 2, r.y * 2 + 1] = hl.u16_sat(white_balance_g1 * hl.cast(hl.Float(32), input[r.x * 2, r.y * 2 + 1]))
-    output[r.x * 2 + 1, r.y * 2 + 1] = hl.u16_sat(
-        white_balance_b * hl.cast(hl.Float(32), input[r.x * 2 + 1, r.y * 2 + 1]))
+    output[r.x * 2    , r.y * 2    ] = hl.u16_sat(white_balance_r  * hl.cast(hl.Float(32), input[r.x * 2    , r.y * 2    ]))
+    output[r.x * 2 + 1, r.y * 2    ] = hl.u16_sat(white_balance_g0 * hl.cast(hl.Float(32), input[r.x * 2 + 1, r.y * 2    ]))
+    output[r.x * 2    , r.y * 2 + 1] = hl.u16_sat(white_balance_g1 * hl.cast(hl.Float(32), input[r.x * 2    , r.y * 2 + 1]))
+    output[r.x * 2 + 1, r.y * 2 + 1] = hl.u16_sat(white_balance_b  * hl.cast(hl.Float(32), input[r.x * 2 + 1, r.y * 2 + 1]))
 
     output.compute_root().parallel(y).vectorize(x, 16)
 
@@ -446,24 +445,24 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
 
     print(black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
                  white_balance_b, compression, gain)
-    #
-    # print("black_white_level")
-    # black_white_level_output = black_white_level(imgs, black_point, white_point)
-    #
-    # print("white_balance")
-    # white_balance_output = white_balance(black_white_level_output, width, height, white_balance_r, white_balance_g0,
-    #                                      white_balance_g1, white_balance_b)
+    
+    print("black_white_level")
+    black_white_level_output = black_white_level(imgs, black_point, white_point)
+    
+    print("white_balance")
+    white_balance_output = white_balance(black_white_level_output, width, height, white_balance_r, white_balance_g0,
+                                         white_balance_g1, white_balance_b)
+    
+    print("demosaic")
+    demosaic_output = demosaic(white_balance_output, width, height) # TODO
 
-    output = hl.Func("asf")
-
-    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
-
-    output[x, y, c] = imgs[x, y]
-
-    # print("demosaic")
-    # demosaic_output = demosaic(white_balance_output, width, height)
+    # output = hl.Func("asf")
+    # x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+    # output[x, y, c] = demosaic_output[x, y, c]
+    
 
     # TODO
+    # print('chroma_denoise')
     # chroma_denoised_output = chroma_denoise(demosaic_output, width, height, denoise_passes)
 
     # print("srgb")
@@ -476,11 +475,13 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     # gamma_correct_output = gamma_correct(tone_map_output)
 
     # TODO
+    # print('contrast')
     # contrast_output = contrast(gamma_correct_output, contrast_strength, black_level)
     #
+    # print('sharpen')
     # sharpen_output = sharpen(contrast_output, sharpen_strength)
 
-    u8bit_interleaved_output = u8bit_interleaved(output)
+    u8bit_interleaved_output = u8bit_interleaved(demosaic_output)
 
     print(f'Finishing finished in {time_diff(start)} ms.\n')
     return u8bit_interleaved_output

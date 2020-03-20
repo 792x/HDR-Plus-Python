@@ -58,7 +58,7 @@ def merge_temporal(images, alignment):
     al_x = idx_im(tx, ix) + offset.x
     al_y = idx_im(ty, iy) + offset.y
 
-    ref_val = hl.cast(hl.UInt(16), imgs_mirror[idx_im(tx, ix), idx_im(ty, iy), 0])
+    ref_val = imgs_mirror[idx_im(tx, ix), idx_im(ty, iy), 0]
     alt_val = imgs_mirror[al_x, al_y, r1]
 
     output[ix, iy, tx, ty] = hl.sum(weight[tx, ty, r1] * alt_val / total_weight[tx, ty]) + ref_val / total_weight[tx, ty]

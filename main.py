@@ -105,12 +105,15 @@ def load_images(burst_path):
         white_balance_g0 = white_balance[1]
         white_balance_g1 = white_balance[2]
         white_balance_b = white_balance[3]
-        black_point = raw.black_level
-        white_point = raw.white_level
-        ref_img = raw.postprocess()
+
+        # Upscale values for black_point and white_point to 16-bit
+        black_point = int(raw.black_level / 1023 * 65535)
+        white_point = int(raw.white_level / 1023 * 65535)
+
+        ref_img = raw.postprocess(output_bps=16)
 
     print('Building image buffer...')
-    result = hl.Buffer(hl.Int(16), [images[0].width(), images[0].height(), len(images)])
+    result = hl.Buffer(hl.UInt(16), [images[0].width(), images[0].height(), len(images)])
     for index, image in enumerate(images):
         resultSlice = result.sliced(2, index)
         resultSlice.copy_from(image)
