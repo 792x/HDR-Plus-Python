@@ -6,7 +6,7 @@ from datetime import datetime
 
 from utils import time_diff
 
-DENOISE_PASSES = 1
+DENOISE_PASSES = 3
 CONTRAST_STRENGTH = 5
 BLACK_LEVEL = 2000
 SHARPEN_STRENGTH = 2
@@ -27,7 +27,6 @@ def black_white_level(input, black_point, white_point):
 def white_balance(input, width, height, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b):
     output = hl.Func("white_balance_output")
 
-    print('here')
     print(width, height, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b)
 
     x, y = hl.Var("x"), hl.Var("y")
@@ -52,7 +51,9 @@ def white_balance(input, width, height, white_balance_r, white_balance_g0, white
 
 
 def demosaic(input, width, height):
+    print(f'width: {width}, height: {height}')
 
+    '''
     f0 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f0")
     f1 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f1")
     f2 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f2")
@@ -130,10 +131,10 @@ def demosaic(input, width, height):
     f3[1, 1] = 4
     f3[0, 2] = -3
 
-    d0[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f0[r0.x, r0.y]) / f0_sum)
-    d1[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f1[r0.x, r0.y]) / f1_sum)
-    d2[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f2[r0.x, r0.y]) / f2_sum)
-    d3[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f3[r0.x, r0.y]) / f3_sum)
+    d0[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r1.x, y + r1.y])) * f0[r0.x, r0.y]) / f0_sum)
+    d1[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r1.x, y + r1.y])) * f1[r0.x, r0.y]) / f1_sum)
+    d2[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r1.x, y + r1.y])) * f2[r0.x, r0.y]) / f2_sum)
+    d3[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r1.x, y + r1.y])) * f3[r0.x, r0.y]) / f3_sum)
 
     R_row = y % 2 == 0
     B_row = y % 2 != 0
@@ -161,12 +162,14 @@ def demosaic(input, width, height):
     output.compute_root().parallel(y).align_bounds(x, 2).unroll(x, 2).align_bounds(y, 2).unroll(y, 2).vectorize(x, 16)
 
     return output
-
     '''
+
+    
     f0 = hl.Func("demosaic_f0")
     f1 = hl.Func("demosaic_f1")
     f2 = hl.Func("demosaic_f2")
     f3 = hl.Func("demosaic_f3")
+
     d0 = hl.Func("demosaic_0")
     d1 = hl.Func("demosaic_1")
     d2 = hl.Func("demosaic_2")
@@ -241,16 +244,16 @@ def demosaic(input, width, height):
 
     output[x, y, c] = input[x, y]
 
-    output[r1.x * 2 + 1, r1.y * 2, 0] = d1[r1.x * 2 + 1, r1.y * 2]
-    output[r1.x * 2, r1.y * 2 + 1, 0] = d2[r1.x * 2, r1.y * 2 + 1]
-    output[r1.x * 2 + 1, r1.y * 2 + 1, 0] = d3[r1.x * 2 + 1, r1.y * 2 + 1]
+    output[r1.x * 2 + 1,    r1.y * 2,       0   ] = d1[r1.x * 2 + 1,    r1.y * 2    ]
+    output[r1.x * 2,        r1.y * 2 + 1,   0   ] = d2[r1.x * 2,        r1.y * 2 + 1]
+    output[r1.x * 2 + 1,    r1.y * 2 + 1,   0   ] = d3[r1.x * 2 + 1,    r1.y * 2 + 1]
 
-    output[r1.x * 2, r1.y * 2, 1] = d0[r1.x * 2, r1.y * 2]
-    output[r1.x * 2 + 1, r1.y * 2 + 1, 1] = d0[r1.x * 2 + 1, r1.y * 2 + 1]
+    output[r1.x * 2,        r1.y * 2,       1   ] = d0[r1.x * 2,        r1.y * 2    ]
+    output[r1.x * 2 + 1,    r1.y * 2 + 1,   1   ] = d0[r1.x * 2 + 1,    r1.y * 2 + 1]
 
-    output[r1.x * 2, r1.y * 2 + 1, 2] = d1[r1.x * 2, r1.y * 2 + 1]
-    output[r1.x * 2 + 1, r1.y * 2, 2] = d2[r1.x * 2 + 1, r1.y * 2]
-    output[r1.x * 2, r1.y * 2, 2] = d3[r1.x * 2, r1.y * 2]
+    output[r1.x * 2,        r1.y * 2 + 1,   2   ] = d1[r1.x * 2,        r1.y * 2 + 1]
+    output[r1.x * 2 + 1,    r1.y * 2,       2   ] = d2[r1.x * 2 + 1,    r1.y * 2    ]
+    output[r1.x * 2,        r1.y * 2,       2   ] = d3[r1.x * 2,        r1.y * 2    ]
 
     f0.compute_root().parallel(y).parallel(x)
     f1.compute_root().parallel(y).parallel(x)
@@ -274,7 +277,192 @@ def demosaic(input, width, height):
     output.update(7).parallel(r1.y)
 
     return output
-    '''
+
+def rgb_to_yuv(input):
+    print('    rgb_to_yuv')
+
+    output = hl.Func("rgb_to_yuv_output")
+
+    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+
+    r = input[x, y, 0]
+    g = input[x, y, 1]
+    b = input[x, y, 2]
+
+    output[x, y, c] = hl.f32(0)
+
+    output[x, y, 0] =   0.2989      * r + 0.587     * g + 0.114     * b
+    output[x, y, 1] =  -0.168935    * r - 0.331655  * g + 0.50059   * b
+    output[x, y, 2] =   0.499813    * r - 0.418531  * g +- 0.081282 * b
+
+    output.compute_root().parallel(y).vectorize(x, 16)
+
+    output.update(0).parallel(y).vectorize(x, 16)
+    output.update(1).parallel(y).vectorize(x, 16)
+    output.update(2).parallel(y).vectorize(x, 16)
+
+    return output
+
+def bilateral_filter(input, width, height):
+    print('    bilateral_filter')
+
+    k = hl.Buffer(hl.Float(32), [7, 7], "gauss_kernel")
+    k.translate([-3, -3])
+
+    weights = hl.Func("bilateral_weights")
+    total_weights = hl.Func("bilateral_total_weights")
+    bilateral = hl.Func("bilateral")
+    output = hl.Func("bilateral_filter_output")
+
+    x, y, dx, dy, c = hl.Var("x"), hl.Var("y"), hl.Var("dx"), hl.Var("dy"), hl.Var("c")
+    r = hl.RDom([(-3, 7), (-3, 7)])
+
+    k.fill(0)
+    k[-3, -3] = 0.000690; k[-2, -3] = 0.002646; k[-1, -3] = 0.005923; k[0, -3] = 0.007748; k[1, -3] = 0.005923; k[2, -3] = 0.002646; k[3, -3] = 0.000690
+    k[-3, -2] = 0.002646; k[-2, -2] = 0.010149; k[-1, -2] = 0.022718; k[0, -2] = 0.029715; k[1, -2] = 0.022718; k[2, -2] = 0.010149; k[3, -2] = 0.002646
+    k[-3, -1] = 0.005923; k[-2, -1] = 0.022718; k[-1, -1] = 0.050855; k[0, -1] = 0.066517; k[1, -1] = 0.050855; k[2, -1] = 0.022718; k[3, -1] = 0.005923
+    k[-3,  0] = 0.007748; k[-2,  0] = 0.029715; k[-1,  0] = 0.066517; k[0,  0] = 0.087001; k[1,  0] = 0.066517; k[2,  0] = 0.029715; k[3,  0] = 0.007748
+    k[-3,  1] = 0.005923; k[-2,  1] = 0.022718; k[-1,  1] = 0.050855; k[0,  1] = 0.066517; k[1,  1] = 0.050855; k[2,  1] = 0.022718; k[3,  1] = 0.005923
+    k[-3,  2] = 0.002646; k[-2,  2] = 0.010149; k[-1,  2] = 0.022718; k[0,  2] = 0.029715; k[1,  2] = 0.022718; k[2,  2] = 0.010149; k[3,  2] = 0.002646
+    k[-3,  3] = 0.000690; k[-2,  3] = 0.002646; k[-1,  3] = 0.005923; k[0,  3] = 0.007748; k[1,  3] = 0.005923; k[2,  3] = 0.002646; k[3,  3] = 0.000690
+
+    input_mirror = hl.BoundaryConditions.mirror_interior(input, [(0, width), (0, height)])
+
+    dist = hl.f32(hl.i32(input_mirror[x, y, c]) - hl.i32(input_mirror[x + dx, y + dy, c]))
+
+    sig2 = 100
+
+    threshold = 25000
+
+    score = hl.select(hl.abs(input_mirror[x + dx, y + dy, c]) > threshold, 0, hl.exp(-dist * dist / sig2))
+
+    weights[dx, dy, x, y, c] = k[dx, dy] * score
+
+    total_weights[x, y, c] = hl.sum(weights[r.x, r.y, x, y, c])
+
+    bilateral[x, y, c] = hl.sum(input_mirror[x + r.x, y + r.y, c] * weights[r.x, r.y, x, y, c]) / total_weights[x, y, c]
+
+    output[x, y, c] = hl.f32(input[x, y, c])
+
+    output[x, y, 1] = bilateral[x, y, 1]
+    output[x, y, 2] = bilateral[x, y, 2]
+
+    weights.compute_at(output, y).vectorize(x, 16)
+
+    output.compute_root().parallel(y).vectorize(x, 16)
+    
+    output.update(0).parallel(y).vectorize(x, 16)
+    output.update(1).parallel(y).vectorize(x, 16)
+
+    return output
+
+
+def gauss_15x15(input, name):
+    print('        gauss_15x15')
+
+    k = hl.Buffer(hl.Float(32), [15], "gauss_15x15")
+    k.translate([-7])
+
+    x = hl.Var("x")
+    r = hl.RDom([(-7, 15)])
+
+    k.fill(0)
+    k[-7] = 0.004961; k[-6] = 0.012246; k[-5] = 0.026304; k[-4] = 0.049165; k[-3] = 0.079968; k[-2] = 0.113193; k[-1] = 0.139431; k[0] = 0.149464
+    k[ 7] = 0.004961; k[ 6] = 0.012246; k[ 5] = 0.026304; k[ 4] = 0.049165; k[ 3] = 0.079968; k[ 2] = 0.113193; k[ 1] = 0.139431
+
+    return gauss(input, k, r, name)
+
+
+def desaturate_noise(input, width, height):
+    print('    desaturate_noise')
+
+    output = hl.Func("desaturate_noise_output")
+
+    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+
+    input_mirror = hl.BoundaryConditions.mirror_image(input, [(0, width), (0, height)])
+
+    blur = gauss_15x15(gauss_15x15(input_mirror, "desaturate_noise_blur1"), "desaturate_noise_blur_2")
+
+    factor = 1.4
+
+    threshold = 25000
+
+    output[x, y, c] = input[x, y, c]
+
+    output[x, y, 1] = hl.select((hl.abs(blur[x, y, 1]) / hl.abs(input[x, y, 1]) < factor) &
+                                (hl.abs(input[x, y, 1]) < threshold) & (hl.abs(blur[x, y, 1]) < threshold),
+                                0.7 * blur[x, y, 1] + 0.3 * input[x, y, 1], input[x, y, 1])
+    
+    output[x, y, 2] = hl.select((hl.abs(blur[x, y, 2]) / hl.abs(input[x, y, 2]) < factor) &
+                                (hl.abs(input[x, y, 2]) < threshold) & (hl.abs(blur[x, y, 2]) < threshold),
+                                0.7 * blur[x, y, 2] + 0.3 * input[x, y, 2], input[x, y, 2])
+    
+    output.compute_root().parallel(y).vectorize(x, 16)
+
+    return output
+
+
+def increase_saturation(input, strength):
+    print('    increase saturation')
+
+    output = hl.Func("increase_saturation_output")
+
+    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+
+    output[x, y, c] = strength * input[x, y, c]
+    output[x, y, 0] = input[x, y, 0]
+
+    output.compute_root().parallel(y).vectorize(x, 16)
+
+    return output
+
+
+def yuv_to_rgb(input):
+    print('    yuv_to_rgb')
+
+    output = hl.Func("yuv_to_rgb_output")
+
+    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+
+    Y = input[x, y, 0]
+    U = input[x, y, 1]
+    V = input[x, y, 2]
+
+    output[x, y, c] = hl.u16(0)
+
+    output[x, y, 0] = hl.u16_sat(Y + 1.403 * V)
+    output[x, y, 1] = hl.u16_sat(Y - 0.344 * U - 0.714 * V)
+    output[x, y, 2] = hl.u16_sat(Y + 1.77 * U)
+
+    output.compute_root().parallel(y).vectorize(x, 16)
+
+    output.update(0).parallel(y).vectorize(x, 16)
+    output.update(1).parallel(y).vectorize(x, 16)
+    output.update(2).parallel(y).vectorize(x, 16)
+
+    return output
+
+
+def chroma_denoise(input, width, height, denoise_passes):
+    print(f'width: {width}, height: {height}, passes: {denoise_passes}')
+
+    output = rgb_to_yuv(input)
+
+    p = 0
+
+    if denoise_passes > 0:
+        output = bilateral_filter(output, width, height)
+    p += 1
+
+    while p < denoise_passes:
+        output = desaturate_noise(output, width, height)
+        p += 1
+    
+    if denoise_passes > 2:
+        output = increase_saturation(output, 1.1)
+    
+    return yuv_to_rgb(output)
 
 
 def srgb(input):
@@ -306,7 +494,10 @@ def srgb(input):
 def gauss(input, k, r, name):
     blur_x = hl.Func(name + "_x")
     output = hl.Func(name)
+
     x, y, c, xi, yi = hl.Var("x"), hl.Var("y"), hl.Var("c"), hl.Var("xi"), hl.Var("yi")
+
+    val = hl.Expr("val")
 
     if input.dimensions() == 2:
         blur_x[x, y] = hl.sum(input[x + r, y] * k[r])
@@ -319,7 +510,7 @@ def gauss(input, k, r, name):
         val = hl.sum(blur_x[x, y + r, c] * k[r])
         if input.output_types()[0] == hl.UInt(16):
             val = hl.cast(hl.UInt(16), val)
-        output[x, y] = val
+        output[x, y, c] = val
 
     blur_x.compute_at(output, x).vectorize(x, 16)
 
@@ -566,16 +757,16 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
                                          white_balance_g1, white_balance_b)
     
     print("demosaic")
-    demosaic_output = demosaic(white_balance_output, width, height) # TODO
+    demosaic_output = demosaic(white_balance_output, width, height)
 
     # output = hl.Func("asf")
     # x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
     # output[x, y, c] = demosaic_output[x, y, c]
     
-
-    # TODO
-    # print('chroma_denoise')
-    # chroma_denoised_output = chroma_denoise(demosaic_output, width, height, denoise_passes)
+    print('chroma_denoise')
+    global DENOISE_PASSES
+    denoise_passes = DENOISE_PASSES
+    chroma_denoised_output = chroma_denoise(demosaic_output, width, height, denoise_passes)
 
     # print("srgb")
     # srgb_output = srgb(demosaic_output)
@@ -593,7 +784,7 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     # print('sharpen')
     # sharpen_output = sharpen(contrast_output, sharpen_strength)
 
-    u8bit_interleaved_output = u8bit_interleaved(demosaic_output)
+    u8bit_interleaved_output = u8bit_interleaved(chroma_denoised_output)
 
     print(f'Finishing finished in {time_diff(start)} ms.\n')
     return u8bit_interleaved_output
