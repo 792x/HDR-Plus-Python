@@ -39,7 +39,7 @@ Returns: numpy ndarray with 3 values for each pixel
 '''
 def load_image(image_path):
     with rawpy.imread(image_path) as raw:
-        image = raw.postprocess(gamma=(1,1), no_auto_bright=True, output_bps=16)
+        image = raw.postprocess(gamma=(1,1), no_auto_bright=True, output_bps=16, four_color_rgb=True)
         return image
 
 

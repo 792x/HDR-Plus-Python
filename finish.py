@@ -52,6 +52,117 @@ def white_balance(input, width, height, white_balance_r, white_balance_g0, white
 
 
 def demosaic(input, width, height):
+
+    f0 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f0")
+    f1 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f1")
+    f2 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f2")
+    f3 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f3")
+
+    f0.translate([-2, -2])
+    f1.translate([-2, -2])
+    f2.translate([-2, -2])
+    f3.translate([-2, -2])
+
+    d0 = hl.Func("demosaic_0")
+    d1 = hl.Func("demosaic_1")
+    d2 = hl.Func("demosaic_2")
+    d3 = hl.Func("demosaic_3")
+
+    output = hl.Func("demosaic_output")
+
+    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+    r0 = hl.RDom([(-2, 5), (-2, 5)])
+    r1 = hl.RDom([(0, width / 2), (0, height / 2)])
+
+    input_mirror = hl.BoundaryConditions.mirror_interior(input, [(0, width), (0, height)])
+
+    f0.fill(0)
+    f1.fill(0)
+    f2.fill(0)
+    f3.fill(0)
+
+    f0_sum = 8
+    f1_sum = 16
+    f2_sum = 16
+    f3_sum = 16
+
+    f0[0, -2] = -1
+    f0[0, -1] = 2
+    f0[-2, 0] = -1
+    f0[-1, 0] = 2
+    f0[0, 0] = 4
+    f0[1, 0] = 2
+    f0[2, 0] = -1
+    f0[0, 1] = 2
+    f0[0, 2] = -1
+
+    f1[0, -2] = 1
+    f1[-1, -1] = -2
+    f1[1, -1] = -2
+    f1[-2, 0] = -2
+    f1[-1, 0] = 8
+    f1[0, 0] = 10
+    f1[1, 0] = 8
+    f1[2, 0] = -2
+    f1[-1, 1] = -2
+    f1[1, 1] = -2
+    f1[0, 2] = 1
+
+    f2[0, -2] = -2
+    f2[-1, -1] = -2
+    f2[0, -1] = 8
+    f2[1, -1] = -2
+    f2[-2, 0] = 1
+    f2[0, 0] = 10
+    f2[2, 0] = 1
+    f2[-1, 1] = -2
+    f2[0, 1] = 8
+    f2[1, 1] = -2
+    f2[0, 2] = -2
+
+    f3[0, -2] = -3
+    f3[-1, -1] = 4
+    f3[1, -1] = 4
+    f3[-2, 0] = -3
+    f3[0, 0] = 12
+    f3[2, 0] = -3
+    f3[-1, 1] = 4
+    f3[1, 1] = 4
+    f3[0, 2] = -3
+
+    d0[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f0[r0.x, r0.y]) / f0_sum)
+    d1[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f1[r0.x, r0.y]) / f1_sum)
+    d2[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f2[r0.x, r0.y]) / f2_sum)
+    d3[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f3[r0.x, r0.y]) / f3_sum)
+
+    R_row = y % 2 == 0
+    B_row = y % 2 != 0
+    R_col = x % 2 == 0
+    B_col = x % 2 != 0
+    at_R = c == 0
+    at_G = c == 1
+    at_B = c == 2
+
+    output[x, y, c] = hl.select(at_R & R_row & B_col, d1[x, y],
+                                at_R & B_row & R_col, d2[x, y],
+                                at_R & B_row & B_col, d3[x, y],
+                                at_G & R_row & R_col, d0[x, y],
+                                at_G & B_row & B_col, d0[x, y],
+                                at_B & B_row & R_col, d1[x, y],
+                                at_B & R_row & B_col, d2[x, y],
+                                at_B & R_row & R_col, d3[x, y],
+                                input[x, y])
+
+    d0.compute_root().parallel(y).vectorize(x, 16)
+    d1.compute_root().parallel(y).vectorize(x, 16)
+    d2.compute_root().parallel(y).vectorize(x, 16)
+    d3.compute_root().parallel(y).vectorize(x, 16)
+
+    output.compute_root().parallel(y).align_bounds(x, 2).unroll(x, 2).align_bounds(y, 2).unroll(y, 2).vectorize(x, 16)
+
+    return output
+
+    '''
     f0 = hl.Func("demosaic_f0")
     f1 = hl.Func("demosaic_f1")
     f2 = hl.Func("demosaic_f2")
@@ -163,6 +274,7 @@ def demosaic(input, width, height):
     output.update(7).parallel(r1.y)
 
     return output
+    '''
 
 
 def srgb(input):
