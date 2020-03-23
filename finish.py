@@ -6,7 +6,7 @@ from datetime import datetime
 
 from utils import time_diff
 
-DENOISE_PASSES = 3
+DENOISE_PASSES = 1
 CONTRAST_STRENGTH = 5
 BLACK_LEVEL = 2000
 SHARPEN_STRENGTH = 2
@@ -19,7 +19,7 @@ def black_white_level(input, black_point, white_point):
 
     white_factor = 65535 / (white_point - black_point)
 
-    output[x, y] = hl.u16_sat((hl.cast(hl.Int(32), input[x, y]) - black_point) * white_factor)
+    output[x, y] = hl.u16_sat((hl.i32(input[x, y]) - black_point) * white_factor)
 
     return output
 
@@ -35,10 +35,10 @@ def white_balance(input, width, height, white_balance_r, white_balance_g0, white
 
     output[x, y] = hl.u16(0)
 
-    output[r.x * 2    , r.y * 2    ] = hl.u16_sat(white_balance_r  * hl.cast(hl.Float(32), input[r.x * 2    , r.y * 2    ]))
-    output[r.x * 2 + 1, r.y * 2    ] = hl.u16_sat(white_balance_g0 * hl.cast(hl.Float(32), input[r.x * 2 + 1, r.y * 2    ]))
-    output[r.x * 2    , r.y * 2 + 1] = hl.u16_sat(white_balance_g1 * hl.cast(hl.Float(32), input[r.x * 2    , r.y * 2 + 1]))
-    output[r.x * 2 + 1, r.y * 2 + 1] = hl.u16_sat(white_balance_b  * hl.cast(hl.Float(32), input[r.x * 2 + 1, r.y * 2 + 1]))
+    output[r.x * 2    , r.y * 2    ] = hl.u16_sat(white_balance_r  * hl.f32(input[r.x * 2    , r.y * 2    ]))
+    output[r.x * 2 + 1, r.y * 2    ] = hl.u16_sat(white_balance_g0 * hl.f32(input[r.x * 2 + 1, r.y * 2    ]))
+    output[r.x * 2    , r.y * 2 + 1] = hl.u16_sat(white_balance_g1 * hl.f32(input[r.x * 2    , r.y * 2 + 1]))
+    output[r.x * 2 + 1, r.y * 2 + 1] = hl.u16_sat(white_balance_b  * hl.f32(input[r.x * 2 + 1, r.y * 2 + 1]))
 
     output.compute_root().parallel(y).vectorize(x, 16)
 
@@ -53,7 +53,6 @@ def white_balance(input, width, height, white_balance_r, white_balance_g0, white
 def demosaic(input, width, height):
     print(f'width: {width}, height: {height}')
 
-    '''
     f0 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f0")
     f1 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f1")
     f2 = hl.Buffer(hl.Int(32), [5, 5], "demosaic_f2")
@@ -131,10 +130,10 @@ def demosaic(input, width, height):
     f3[1, 1] = 4
     f3[0, 2] = -3
 
-    d0[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r1.x, y + r1.y])) * f0[r0.x, r0.y]) / f0_sum)
-    d1[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r1.x, y + r1.y])) * f1[r0.x, r0.y]) / f1_sum)
-    d2[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r1.x, y + r1.y])) * f2[r0.x, r0.y]) / f2_sum)
-    d3[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r1.x, y + r1.y])) * f3[r0.x, r0.y]) / f3_sum)
+    d0[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + r0.x, y + r0.y]) * f0[r0.x, r0.y]) / f0_sum)
+    d1[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + r0.x, y + r0.y]) * f1[r0.x, r0.y]) / f1_sum)
+    d2[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + r0.x, y + r0.y]) * f2[r0.x, r0.y]) / f2_sum)
+    d3[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + r0.x, y + r0.y]) * f3[r0.x, r0.y]) / f3_sum)
 
     R_row = y % 2 == 0
     B_row = y % 2 != 0
@@ -162,9 +161,8 @@ def demosaic(input, width, height):
     output.compute_root().parallel(y).align_bounds(x, 2).unroll(x, 2).align_bounds(y, 2).unroll(y, 2).vectorize(x, 16)
 
     return output
-    '''
 
-    
+    '''
     f0 = hl.Func("demosaic_f0")
     f1 = hl.Func("demosaic_f1")
     f2 = hl.Func("demosaic_f2")
@@ -277,6 +275,7 @@ def demosaic(input, width, height):
     output.update(7).parallel(r1.y)
 
     return output
+    '''
 
 def rgb_to_yuv(input):
     print('    rgb_to_yuv')
@@ -328,7 +327,7 @@ def bilateral_filter(input, width, height):
 
     input_mirror = hl.BoundaryConditions.mirror_interior(input, [(0, width), (0, height)])
 
-    dist = hl.f32(hl.i32(input_mirror[x, y, c]) - hl.i32(input_mirror[x + dx, y + dy, c]))
+    dist = hl.cast(hl.Float(32), hl.cast(hl.Int(32), input_mirror[x, y, c]) - hl.cast(hl.Int(32), input_mirror[x + dx, y + dy, c]))
 
     sig2 = 100
 
@@ -342,7 +341,7 @@ def bilateral_filter(input, width, height):
 
     bilateral[x, y, c] = hl.sum(input_mirror[x + r.x, y + r.y, c] * weights[r.x, r.y, x, y, c]) / total_weights[x, y, c]
 
-    output[x, y, c] = hl.f32(input[x, y, c])
+    output[x, y, c] = hl.cast(hl.Float(32), input[x, y, c])
 
     output[x, y, 1] = bilateral[x, y, 1]
     output[x, y, 2] = bilateral[x, y, 2]
@@ -429,7 +428,7 @@ def yuv_to_rgb(input):
     U = input[x, y, 1]
     V = input[x, y, 2]
 
-    output[x, y, c] = hl.u16(0)
+    output[x, y, c] = hl.cast(hl.UInt(16), 0)
 
     output[x, y, 0] = hl.u16_sat(Y + 1.403 * V)
     output[x, y, 1] = hl.u16_sat(Y - 0.344 * U - 0.714 * V)
@@ -465,7 +464,7 @@ def chroma_denoise(input, width, height, denoise_passes):
     return yuv_to_rgb(output)
 
 
-def srgb(input):
+def srgb(input, ccm):
     srgb_matrix = hl.Func("srgb_matrix")
     output = hl.Func("srgb_output")
 
@@ -475,15 +474,15 @@ def srgb(input):
 
     srgb_matrix[x, y] = hl.f32(0)
 
-    srgb_matrix[0, 0] = hl.f32(0.964399)
-    srgb_matrix[1, 0] = hl.f32(-1.119710)
-    srgb_matrix[2, 0] = hl.f32(0.155311)
-    srgb_matrix[0, 1] = hl.f32(-0.241156)
-    srgb_matrix[1, 1] = hl.f32(1.673722)
-    srgb_matrix[2, 1] = hl.f32(-0.432566)
-    srgb_matrix[0, 2] = hl.f32(0.013887)
-    srgb_matrix[1, 2] = hl.f32(-0.549820)
-    srgb_matrix[2, 2] = hl.f32(1.535933)
+    srgb_matrix[0, 0] = hl.f32(ccm[0][0])
+    srgb_matrix[1, 0] = hl.f32(ccm[0][1])
+    srgb_matrix[2, 0] = hl.f32(ccm[0][2])
+    srgb_matrix[0, 1] = hl.f32(ccm[1][0])
+    srgb_matrix[1, 1] = hl.f32(ccm[1][1])
+    srgb_matrix[2, 1] = hl.f32(ccm[1][2])
+    srgb_matrix[0, 2] = hl.f32(ccm[2][0])
+    srgb_matrix[1, 2] = hl.f32(ccm[2][1])
+    srgb_matrix[2, 2] = hl.f32(ccm[2][2])
 
     output[x, y, c] = hl.u16_sat(hl.sum(srgb_matrix[r, c] * input[x, y, r]))
 
@@ -503,13 +502,13 @@ def gauss(input, k, r, name):
         blur_x[x, y] = hl.sum(input[x + r, y] * k[r])
         val = hl.sum(blur_x[x, y + r] * k[r])
         if input.output_types()[0] == hl.UInt(16):
-            val = hl.cast(hl.UInt(16), val)
+            val = hl.u16(val)
         output[x, y] = val
     else:
         blur_x[x, y, c] = hl.sum(input[x + r, y, c] * k[r])
         val = hl.sum(blur_x[x, y + r, c] * k[r])
         if input.output_types()[0] == hl.UInt(16):
-            val = hl.cast(hl.UInt(16), val)
+            val = hl.u16(val)
         output[x, y, c] = val
 
     blur_x.compute_at(output, x).vectorize(x, 16)
@@ -519,25 +518,23 @@ def gauss(input, k, r, name):
     return output
 
 def gauss_7x7(input, name):
-    k = hl.Func("gauss_7x7_kernel")
+    k = hl.Buffer(hl.Float(32), [7], "gauss_7x7_kernel")
+    k.translate([-3])
 
     x = hl.Var("x")
-
     r = hl.RDom([(-3, 7)])
 
-    k[x] = hl.cast(hl.Float(32), 0)
-
+    k.fill(0)
     k[-3] = 0.026267
     k[-2] = 0.100742
     k[-1] = 0.225511
     k[0] = 0.29496
-    k[3] = 0.026267
-    k[2] = 0.100742
     k[1] = 0.225511
-
-    k.compute_root().parallel(x)
+    k[2] = 0.100742
+    k[3] = 0.026267
 
     return gauss(input, k, r, name)
+
 
 def diff(im1, im2, name):
     output = hl.Func(name)
@@ -545,9 +542,9 @@ def diff(im1, im2, name):
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
     if im1.dimensions() == 2:
-        output[x, y] = hl.cast(hl.Int(32), im1[x, y]) - hl.cast(hl.Int(32), im2[x, y])
+        output[x, y] = hl.abs(hl.i32(im1[x, y]) - hl.i32(im2[x, y]))
     else:
-        output[x, y, c] = hl.cast(hl.Int(32), im1[x, y, c]) - hl.cast(hl.Int(32), im2[x, y, c])
+        output[x, y, c] = hl.abs(hl.i32(im1[x, y, c]) - hl.i32(im2[x, y, c]))
 
     return output
 
@@ -568,8 +565,8 @@ def combine(im1, im2, width, height, dist):
     blurred1 = gauss_7x7(im1_mirror, "img1_layer_0")
     blurred2 = gauss_7x7(im2_mirror, "img2_layer_0")
 
-    weight1 = hl.cast(hl.Float(32), dist[im1_mirror[x, y]])
-    weight2 = hl.cast(hl.Float(32), dist[im2_mirror[x, y]])
+    weight1 = hl.f32(dist[im1_mirror[x, y]])
+    weight2 = hl.f32(dist[im2_mirror[x, y]])
 
     init_mask1[x, y] = weight1 / (weight1 + weight2)
     init_mask2[x, y] = 1 - init_mask1[x, y]
@@ -581,27 +578,27 @@ def combine(im1, im2, width, height, dist):
 
     accumulator[x, y] = hl.i32(0)
 
-    for i in range(num_layers):
-        print('num_layers', i)
+    for i in range(1, num_layers):
+        print('        layer', i)
 
-        prev_layer_str = str(i)
-        layer_str = str(i + 1)
+        prev_layer_str = str(i-1)
+        layer_str = str(i)
 
         laplace1 = diff(unblurred1, blurred1, "laplace1_layer_" + prev_layer_str)
         laplace2 = diff(unblurred2, blurred2, "laplace2_layer_" + layer_str)
 
-        accumulator[x, y] += hl.cast(hl.Int(32), laplace1[x,y] * mask1[x,y]) + hl.cast(hl.Int(32), laplace2[x,y] * mask2[x,y])
+        accumulator[x, y] += hl.i32(laplace1[x,y] * mask1[x,y]) + hl.i32(laplace2[x,y] * mask2[x,y])
 
         unblurred1 = blurred1
         unblurred2 = blurred2
 
         blurred1 = gauss_7x7(blurred1, "img1_layer_" + layer_str)
-        blurred2 = gauss_7x7(blurred2, "img1_layer_" + layer_str)
+        blurred2 = gauss_7x7(blurred2, "img2_layer_" + layer_str)
 
         mask1 = gauss_7x7(mask1, "mask1_layer_" + layer_str)
         mask2 = gauss_7x7(mask2, "mask2_layer_" + layer_str)
 
-    accumulator[x, y] += hl.cast(hl.Int(32), blurred1[x, y] * mask1[x, y]) + hl.cast(hl.Int(32), blurred2[x, y] * mask2[x, y])
+    accumulator[x, y] += hl.i32(blurred1[x, y] * mask1[x, y]) + hl.i32(blurred2[x, y] * mask2[x, y])
 
     output[x, y] = hl.u16_sat(accumulator[x, y])
 
@@ -620,7 +617,7 @@ def brighten(input, gain):
 
     x, y = hl.Var("x"), hl.Var("y")
 
-    output[x, y] = hl.u16_sat(gain * hl.cast(hl.UInt(32), input[x, y]))
+    output[x, y] = hl.u16_sat(gain * hl.u32(input[x, y]))
 
     return output
 
@@ -637,11 +634,13 @@ def gamma_correct(input):
     gamma_con = -3604.425
 
     if input.dimensions() == 2:
-        output[x, y] = hl.cast(hl.UInt(16), hl.select(input[x, y] < cutoff, gamma_toe * input[x, y],
-                                                      gamma_fac * hl.pow(input[x, y], gamma_pow) + gamma_con))
+        output[x, y] = hl.u16(hl.select(input[x, y] < cutoff, 
+                                        gamma_toe * input[x, y],
+                                        gamma_fac * hl.pow(input[x, y], gamma_pow) + gamma_con))
     else:
-        output[x, y, c] = hl.cast(hl.UInt(16), hl.select(input[x, y, c] < cutoff, gamma_toe * input[x, y, c],
-                                                         gamma_fac * hl.pow(input[x, y, c], gamma_pow) + gamma_con))
+        output[x, y, c] = hl.u16(hl.select(input[x, y, c] < cutoff, 
+                                           gamma_toe * input[x, y, c],
+                                           gamma_fac * hl.pow(input[x, y, c], gamma_pow) + gamma_con))
 
     output.compute_root().parallel(y).vectorize(x, 16)
 
@@ -660,14 +659,13 @@ def gamma_inverse(input):
     gamma_con = 0.055
 
     if input.dimensions() == 2:
-        output[x, y] = hl.cast(hl.UInt(16), hl.select(input[x, y] < cutoff, gamma_toe * input[x, y],
-                                                      hl.pow(hl.cast(hl.Float(32), input[x, y]) / 65535 + gamma_con,
-                                                             gamma_pow) * gamma_fac))
+        output[x, y] = hl.u16(hl.select(input[x, y] < cutoff, 
+                                        gamma_toe * input[x, y],
+                                        hl.pow(hl.f32(input[x, y]) / 65535 + gamma_con, gamma_pow) * gamma_fac))
     else:
-        output[x, y, c] = hl.cast(hl.UInt(16), hl.select(input[x, y, c] < cutoff, gamma_toe * input[x, y, c],
-                                                         hl.pow(
-                                                             hl.cast(hl.Float(32), input[x, y, c]) / 65535 + gamma_con,
-                                                             gamma_pow) * gamma_fac))
+        output[x, y, c] = hl.u16(hl.select(input[x, y, c] < cutoff, 
+                                           gamma_toe * input[x, y],
+                                           hl.pow(hl.f32(input[x, y, c]) / 65535 + gamma_con, gamma_pow) * gamma_fac))
 
     output.compute_root().parallel(y).vectorize(x, 16)
 
@@ -675,6 +673,8 @@ def gamma_inverse(input):
 
 
 def tone_map(input, width, height, compression, gain):
+    print(f'Compression: {compression}, gain: {gain}')
+
     normal_dist = hl.Func("luma_weight_distribution")
     grayscale = hl.Func("grayscale")
     output = hl.Func("tone_map_output")
@@ -683,9 +683,9 @@ def tone_map(input, width, height, compression, gain):
 
     r = hl.RDom([(0, 3)])
 
-    normal_dist[v] = hl.cast(hl.Float(32), hl.exp(-12.5 * hl.pow(hl.cast(hl.Float(32), v) / 65535 - 0.5, 2)))
+    normal_dist[v] = hl.f32(hl.exp(-12.5 * hl.pow(hl.f32(v) / 65535 - 0.5, 2)))
 
-    grayscale[x, y] = hl.cast(hl.UInt(16), hl.sum(hl.cast(hl.UInt(32), input[x, y, r])) / 3)
+    grayscale[x, y] = hl.u16(hl.sum(hl.u32(input[x, y, r])) / 3)
 
     dark = grayscale
 
@@ -698,9 +698,9 @@ def tone_map(input, width, height, compression, gain):
     gain_slope = (gain - gain_const) / (num_passes - 1)
 
     for i in range(num_passes):
-        print('num_pass', i)
-        norm_comp = i * comp_slope + comp_const
+        print('    pass', i)
 
+        norm_comp = i * comp_slope + comp_const
         norm_gain = i * gain_slope + gain_const
 
         bright = brighten(dark, norm_comp)
@@ -712,7 +712,7 @@ def tone_map(input, width, height, compression, gain):
 
         dark = brighten(gamma_inverse(dark_gamma), norm_gain)
 
-    output[x, y, c] = hl.u16_sat(hl.cast(hl.UInt(32), input[x, y, c]) * hl.cast(hl.UInt(32), dark[x, y]) / hl.max(1, grayscale[x, y]))
+    output[x, y, c] = hl.u16_sat(hl.u32(input[x, y, c]) * hl.u32(dark[x, y]) / hl.max(1, grayscale[x, y]))
 
     grayscale.compute_root().parallel(y).vectorize(x, 16)
 
@@ -732,6 +732,22 @@ def u8bit_interleaved(input):
     return output
 
 
+def shift_bayer_to_rggb(input, cfa_pattern):
+    print(f'cfa_pattern: {cfa_pattern}')
+    output = hl.Func("rggb_input")
+    x, y = hl.Var("x"), hl.Var("y")
+    cfa = hl.Expr("cfa")
+
+    cfa = hl.u16(cfa_pattern)
+
+    output[x, y] = hl.select(cfa == hl.u16(1), input[x, y],
+                             cfa == hl.u16(2), input[x + 1, y],
+                             cfa == hl.u16(4), input[x, y + 1],
+                             cfa == hl.u16(3), input[x + 1, y + 1],
+                             0)
+    return output
+
+
 '''
 Step 3 of HDR+ pipeline: finish
 
@@ -741,7 +757,7 @@ image : numpy ndarray
 Returns: numpy ndarray (finished image)
 '''
 def finish_image(imgs, width, height, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
-                 white_balance_b, compression, gain):
+                 white_balance_b, compression, gain, cfa_pattern, ccm):
 
     print(f'\n{"=" * 30}\nFinishing image...\n{"=" * 30}')
     start = datetime.utcnow()
@@ -749,8 +765,11 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     print(black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
                  white_balance_b, compression, gain)
     
+    print("bayer_to_rggb")
+    bayer_shifted = shift_bayer_to_rggb(imgs, cfa_pattern)
+    
     print("black_white_level")
-    black_white_level_output = black_white_level(imgs, black_point, white_point)
+    black_white_level_output = black_white_level(bayer_shifted, black_point, white_point)
     
     print("white_balance")
     white_balance_output = white_balance(black_white_level_output, width, height, white_balance_r, white_balance_g0,
@@ -768,12 +787,12 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     denoise_passes = DENOISE_PASSES
     chroma_denoised_output = chroma_denoise(demosaic_output, width, height, denoise_passes)
 
-    # print("srgb")
-    # srgb_output = srgb(demosaic_output)
-    #
-    # print("tone_map")
-    # tone_map_output = tone_map(srgb_output, width, height, compression, gain)
-    #
+    print("srgb")
+    srgb_output = srgb(chroma_denoised_output, ccm)
+    
+    print("tone_map")
+    tone_map_output = tone_map(srgb_output, width, height, compression, gain) # TODO
+    
     # print("gamma_correct")
     # gamma_correct_output = gamma_correct(tone_map_output)
 
@@ -784,7 +803,8 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     # print('sharpen')
     # sharpen_output = sharpen(contrast_output, sharpen_strength)
 
-    u8bit_interleaved_output = u8bit_interleaved(chroma_denoised_output)
+    print('u8bit_interleave')
+    u8bit_interleaved_output = u8bit_interleaved(tone_map_output)
 
     print(f'Finishing finished in {time_diff(start)} ms.\n')
     return u8bit_interleaved_output

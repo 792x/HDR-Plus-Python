@@ -55,6 +55,28 @@ def to_grayscale(image):
     return np.mean(image, axis=2)
 
 
+def decode_pattern(pattern):
+    pattern_str = ""
+    for row in pattern:
+        for val in row:
+            if val == 0:
+                pattern_str += 'R'
+            elif val == 1:
+                pattern_str += 'G'
+            elif val == 2:
+                pattern_str += 'B'
+            else:
+                pattern_str += 'G'
+    if pattern_str == 'RGGB':
+        return 1
+    elif pattern_str == 'GRBG':
+        return 2
+    elif pattern_str == 'BGGR':
+        return 3
+    else:
+        return 4
+
+
 '''
 Loads a burst of images
 
@@ -73,6 +95,7 @@ def load_images(burst_path):
     white_balance_b = 0
     black_point = 0
     white_point = 0
+    cfa_pattern = 0
 
     # Create list of paths to the images
     paths = []
@@ -105,6 +128,9 @@ def load_images(burst_path):
         white_balance_g0 = white_balance[1]
         white_balance_g1 = white_balance[2]
         white_balance_b = white_balance[3]
+        cfa_pattern = raw.raw_pattern
+        cfa_pattern = decode_pattern(cfa_pattern)
+        ccm = raw.color_matrix
 
         # Upscale values for black_point and white_point to 16-bit
         black_point = int(raw.black_level / 1023 * 65535)
@@ -119,7 +145,7 @@ def load_images(burst_path):
         resultSlice.copy_from(image)
 
     print(f'Loading finished in {time_diff(start)} ms.\n')
-    return result, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point
+    return result, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point, cfa_pattern, ccm
 
 
 '''
@@ -134,7 +160,7 @@ def HDR(burst_path, compression, gain):
     start = datetime.utcnow()
 
     # Load the images
-    images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point = load_images(burst_path)
+    images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point, cfa_pattern, ccm = load_images(burst_path)
 
     # dimensions of image should be 3
     assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"
@@ -149,7 +175,7 @@ def HDR(burst_path, compression, gain):
     merged = merge_images(images, alignment)
 
     # Finish the image
-    finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain)
+    finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, cfa_pattern, ccm)
 
     result = finished.realize(images.width(), images.height(), 3)
 
