@@ -486,8 +486,6 @@ def srgb(input, ccm):
 
     output[x, y, c] = hl.u16_sat(hl.sum(srgb_matrix[r, c] * input[x, y, r]))
 
-    srgb_matrix.compute_root().parallel(y).parallel(x)
-
     return output
 
 def gauss(input, k, r, name):
@@ -664,7 +662,7 @@ def gamma_inverse(input):
                                         hl.pow(hl.f32(input[x, y]) / 65535 + gamma_con, gamma_pow) * gamma_fac))
     else:
         output[x, y, c] = hl.u16(hl.select(input[x, y, c] < cutoff, 
-                                           gamma_toe * input[x, y],
+                                           gamma_toe * input[x, y, c],
                                            hl.pow(hl.f32(input[x, y, c]) / 65535 + gamma_con, gamma_pow) * gamma_fac))
 
     output.compute_root().parallel(y).vectorize(x, 16)
@@ -712,7 +710,7 @@ def tone_map(input, width, height, compression, gain):
 
         dark = brighten(gamma_inverse(dark_gamma), norm_gain)
 
-    output[x, y, c] = hl.u16_sat(hl.u32(input[x, y, c]) * hl.u32(dark[x, y]) / hl.max(1, grayscale[x, y]))
+    output[x, y, c] = hl.u16_sat(hl.u32(input[x, y, c]) * hl.u32(dark[x, y]) / hl.u16(hl.max(1, grayscale[x, y])))
 
     grayscale.compute_root().parallel(y).vectorize(x, 16)
 
@@ -759,9 +757,6 @@ Returns: numpy ndarray (finished image)
 def finish_image(imgs, width, height, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
                  white_balance_b, compression, gain, cfa_pattern, ccm):
 
-    print(f'\n{"=" * 30}\nFinishing image...\n{"=" * 30}')
-    start = datetime.utcnow()
-
     print(black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
                  white_balance_b, compression, gain)
     
@@ -774,13 +769,13 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     print("white_balance")
     white_balance_output = white_balance(black_white_level_output, width, height, white_balance_r, white_balance_g0,
                                          white_balance_g1, white_balance_b)
-    
-    print("demosaic")
-    demosaic_output = demosaic(white_balance_output, width, height)
 
     # output = hl.Func("asf")
     # x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
-    # output[x, y, c] = demosaic_output[x, y, c]
+    # output[x, y, c] = white_balance_output[x, y]
+    
+    print("demosaic")
+    demosaic_output = demosaic(white_balance_output, width, height)
     
     print('chroma_denoise')
     global DENOISE_PASSES
@@ -803,8 +798,7 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     # print('sharpen')
     # sharpen_output = sharpen(contrast_output, sharpen_strength)
 
-    print('u8bit_interleave')
-    u8bit_interleaved_output = u8bit_interleaved(tone_map_output)
+    # print('u8bit_interleave')
+    # u8bit_interleaved_output = u8bit_interleaved(gamma_correct_output)
 
-    print(f'Finishing finished in {time_diff(start)} ms.\n')
-    return u8bit_interleaved_output
+    return tone_map_output

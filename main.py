@@ -175,9 +175,12 @@ def HDR(burst_path, compression, gain):
     merged = merge_images(images, alignment)
 
     # Finish the image
+    print(f'\n{"=" * 30}\nFinishing image...\n{"=" * 30}')
+    start_finish = datetime.utcnow()
     finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, cfa_pattern, ccm)
 
     result = finished.realize(images.width(), images.height(), 3)
+    print(f'Finishing finished in {time_diff(start_finish)} ms.\n')
 
     imageio.imsave('Output/output.jpg', result)
 
