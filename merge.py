@@ -41,7 +41,7 @@ def merge_temporal(images, alignment):
     ref_val = layer[idx_layer(tx, r0.x), idx_layer(ty, r0.y), 0]
     alt_val = layer[al_x, al_y, n]
 
-    factor = 8
+    factor = 8.0
     min_dist = 10
     max_dist = 300
 
@@ -49,7 +49,7 @@ def merge_temporal(images, alignment):
 
     norm_dist = hl.max(1, hl.cast(hl.Int(32), dist) / factor - min_dist / factor)
 
-    weight[tx, ty, n] = hl.select(norm_dist > (max_dist - min_dist), 0, 1 / norm_dist)
+    weight[tx, ty, n] = hl.select(norm_dist > (max_dist - min_dist), 0.0, 1.0 / norm_dist)
 
     total_weight[tx, ty] = hl.sum(weight[tx, ty, r1]) + 1
 
@@ -111,7 +111,6 @@ Returns: numpy ndarray (merged image)
 def merge_images(images, alignment):
     print(f'\n{"="*30}\nMerging images...\n{"="*30}')
     start = datetime.utcnow()
-
     merge_temporal_output = merge_temporal(images, alignment)
     merge_spatial_output = merge_spatial(merge_temporal_output)
     
