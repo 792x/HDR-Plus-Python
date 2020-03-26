@@ -39,7 +39,7 @@ Returns: numpy ndarray with 3 values for each pixel
 '''
 def load_image(image_path):
     with rawpy.imread(image_path) as raw:
-        image = raw.postprocess(gamma=(1,1), no_auto_bright=True, output_bps=16, four_color_rgb=True)
+        image = raw.raw_image_visible
         return image
 
 
@@ -124,17 +124,16 @@ def load_images(burst_path):
     print('Getting reference image...')
     with rawpy.imread(paths[0]) as raw:
         white_balance = raw.camera_whitebalance
-        white_balance_r = white_balance[0]
-        white_balance_g0 = white_balance[1]
-        white_balance_g1 = white_balance[2]
-        white_balance_b = white_balance[3]
+        white_balance_r = white_balance[0] / white_balance[1]
+        white_balance_g0 = 1
+        white_balance_g1 = 1
+        white_balance_b = white_balance[2] / white_balance[1]
         cfa_pattern = raw.raw_pattern
         cfa_pattern = decode_pattern(cfa_pattern)
         ccm = raw.color_matrix
 
-        # Upscale values for black_point and white_point to 16-bit
-        black_point = int(raw.black_level / 1023 * 65535)
-        white_point = int(raw.white_level / 1023 * 65535)
+        black_point = int(raw.black_level)
+        white_point = int(raw.white_level)
 
         ref_img = raw.postprocess(output_bps=16)
 
@@ -179,7 +178,11 @@ def HDR(burst_path, compression, gain):
     start_finish = datetime.utcnow()
     finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, cfa_pattern, ccm)
 
-    result = finished.realize(images.width(), images.height(), 3)
+    result = finished.realize(3, images.width(), images.height())
+
+    result.transpose(0, 1)
+    result.transpose(1, 2)
+
     print(f'Finishing finished in {time_diff(start_finish)} ms.\n')
 
     imageio.imsave('Output/output.jpg', result)

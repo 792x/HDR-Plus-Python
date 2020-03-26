@@ -721,9 +721,9 @@ def tone_map(input, width, height, compression, gain):
 def u8bit_interleaved(input):
     output = hl.Func("8bit_interleaved_output")
 
-    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+    c, x, y = hl.Var("c"), hl.Var("x"), hl.Var("y")
 
-    output[x, y, c] = hl.u8_sat(input[x, y, c] / 256)
+    output[c, x, y] = hl.u8_sat(input[x, y, c] / 256)
 
     output.compute_root().parallel(y).vectorize(x, 16)
 
@@ -784,7 +784,7 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
 
     print("srgb")
     srgb_output = srgb(chroma_denoised_output, ccm)
-    
+
     print("tone_map")
     tone_map_output = tone_map(srgb_output, width, height, compression, gain) # TODO
     
@@ -798,7 +798,7 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     # print('sharpen')
     # sharpen_output = sharpen(contrast_output, sharpen_strength)
 
-    # print('u8bit_interleave')
-    # u8bit_interleaved_output = u8bit_interleaved(gamma_correct_output)
+    print('u8bit_interleave')
+    u8bit_interleaved_output = u8bit_interleaved(tone_map_output)
 
-    return tone_map_output
+    return u8bit_interleaved_output
