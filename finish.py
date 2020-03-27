@@ -1,3 +1,5 @@
+import math
+
 import cv2 as cv
 import numpy as np
 import halide as hl
@@ -585,7 +587,7 @@ def combine(im1, im2, width, height, dist):
         laplace1 = diff(unblurred1, blurred1, "laplace1_layer_" + prev_layer_str)
         laplace2 = diff(unblurred2, blurred2, "laplace2_layer_" + layer_str)
 
-        accumulator[x, y] += hl.i32(laplace1[x,y] * mask1[x,y]) + hl.i32(laplace2[x,y] * mask2[x,y])
+        accumulator[x, y] += hl.i32(laplace1[x, y] * mask1[x, y]) + hl.i32(laplace2[x, y] * mask2[x, y])
 
         unblurred1 = blurred1
         unblurred2 = blurred2
@@ -718,6 +720,70 @@ def tone_map(input, width, height, compression, gain):
 
     return output
 
+
+
+def shift_bayer_to_rggb(input, cfa_pattern):
+    print(f'cfa_pattern: {cfa_pattern}')
+    output = hl.Func("rggb_input")
+    x, y = hl.Var("x"), hl.Var("y")
+
+    cfa = hl.u16(cfa_pattern)
+
+    output[x, y] = hl.select(cfa == hl.u16(1), input[x, y],
+                             cfa == hl.u16(2), input[x + 1, y],
+                             cfa == hl.u16(4), input[x, y + 1],
+                             cfa == hl.u16(3), input[x + 1, y + 1],
+                             0)
+    return output
+
+
+def contrast(input, strength, black_point):
+    output = hl.Func("contrast_output")
+
+    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+
+    scale = 0.8 + 0.3 / min(1, strength)
+
+    inner_constant = math.pi / (2 * scale)
+    sin_constant = hl.sin(inner_constant)
+    slope = 65535 / (2 * sin_constant)
+    constant = slope * sin_constant
+    factor = math.pi / (scale * 65535)
+
+    val = factor * hl.cast(hl.Float(32), input[x, y, c])
+
+    output[x, y, c] = hl.u16_sat(slope * hl.sin(val - inner_constant) + constant)
+
+    white_scale = 65535 / (65535 - black_point)
+
+    output[x, y, c] = hl.u16_sat((hl.cast(hl.Int(32), output[x, y, c]) - black_point) * white_scale)
+
+    output.compute_root().parallel(y).vectorize(x, 16)
+
+    return output
+
+
+def sharpen(input, strength):
+    output_yuv = hl.Func("sharpen_output")
+
+    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
+
+    yuv_input = rgb_to_yuv(input)
+
+    small_blurred = gauss_7x7(yuv_input, "unsharp_small_blur")
+    large_blurred = gauss_7x7(small_blurred, "unsharp_large_blur")
+
+    difference_of_gauss = diff(small_blurred, large_blurred, "unsharp_DoG")
+
+    output_yuv[x, y, c] = yuv_input[x, y, c]
+    output_yuv[x, y, 0] = yuv_input[x, y, 0] + strength * difference_of_gauss[x, y, 0]
+
+    output = yuv_to_rgb(output_yuv)
+
+    output_yuv.compute_root().parallel(y).vectorize(x, 16)
+
+    return output
+
 def u8bit_interleaved(input):
     output = hl.Func("8bit_interleaved_output")
 
@@ -729,21 +795,6 @@ def u8bit_interleaved(input):
 
     return output
 
-
-def shift_bayer_to_rggb(input, cfa_pattern):
-    print(f'cfa_pattern: {cfa_pattern}')
-    output = hl.Func("rggb_input")
-    x, y = hl.Var("x"), hl.Var("y")
-    cfa = hl.Expr("cfa")
-
-    cfa = hl.u16(cfa_pattern)
-
-    output[x, y] = hl.select(cfa == hl.u16(1), input[x, y],
-                             cfa == hl.u16(2), input[x + 1, y],
-                             cfa == hl.u16(4), input[x, y + 1],
-                             cfa == hl.u16(3), input[x + 1, y + 1],
-                             0)
-    return output
 
 
 '''
@@ -770,35 +821,28 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     white_balance_output = white_balance(black_white_level_output, width, height, white_balance_r, white_balance_g0,
                                          white_balance_g1, white_balance_b)
 
-    # output = hl.Func("asf")
-    # x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
-    # output[x, y, c] = white_balance_output[x, y]
-    
     print("demosaic")
     demosaic_output = demosaic(white_balance_output, width, height)
     
     print('chroma_denoise')
-    global DENOISE_PASSES
-    denoise_passes = DENOISE_PASSES
-    chroma_denoised_output = chroma_denoise(demosaic_output, width, height, denoise_passes)
+    chroma_denoised_output = chroma_denoise(demosaic_output, width, height, DENOISE_PASSES)
 
     print("srgb")
     srgb_output = srgb(chroma_denoised_output, ccm)
 
-    print("tone_map")
-    tone_map_output = tone_map(srgb_output, width, height, compression, gain) # TODO
-    
-    # print("gamma_correct")
-    # gamma_correct_output = gamma_correct(tone_map_output)
-
-    # TODO
-    # print('contrast')
-    # contrast_output = contrast(gamma_correct_output, contrast_strength, black_level)
+    # print("tone_map")
+    # tone_map_output = tone_map(srgb_output, width, height, compression, gain)
     #
-    # print('sharpen')
-    # sharpen_output = sharpen(contrast_output, sharpen_strength)
+    print("gamma_correct")
+    gamma_correct_output = gamma_correct(srgb_output)
+
+    print('contrast')
+    contrast_output = contrast(gamma_correct_output, CONTRAST_STRENGTH, black_point)
+
+    print('sharpen')
+    sharpen_output = sharpen(contrast_output, SHARPEN_STRENGTH)
 
     print('u8bit_interleave')
-    u8bit_interleaved_output = u8bit_interleaved(tone_map_output)
+    u8bit_interleaved_output = u8bit_interleaved(srgb_output)
 
     return u8bit_interleaved_output

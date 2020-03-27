@@ -124,15 +124,15 @@ def load_images(burst_path):
     print('Getting reference image...')
     with rawpy.imread(paths[0]) as raw:
         white_balance = raw.camera_whitebalance
+        print('white balance', white_balance)
         white_balance_r = white_balance[0] / white_balance[1]
-        white_balance_g0 = 1
-        white_balance_g1 = 1
+        white_balance_g0 = white_balance[1]
+        white_balance_g1 = white_balance[1]
         white_balance_b = white_balance[2] / white_balance[1]
         cfa_pattern = raw.raw_pattern
         cfa_pattern = decode_pattern(cfa_pattern)
         ccm = raw.color_matrix
-
-        black_point = int(raw.black_level)
+        black_point = int(raw.black_level_per_channel[0])
         white_point = int(raw.white_level)
 
         ref_img = raw.postprocess(output_bps=16)
