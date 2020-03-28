@@ -132,7 +132,7 @@ def load_images(burst_path):
         cfa_pattern = raw.raw_pattern
         cfa_pattern = decode_pattern(cfa_pattern)
         ccm = raw.color_matrix
-        black_point = int(raw.black_level_per_channel[0])
+        black_point = int(sum(raw.black_level_per_channel) / len(raw.black_level_per_channel))
         white_point = int(raw.white_level)
 
         ref_img = raw.postprocess(output_bps=16)

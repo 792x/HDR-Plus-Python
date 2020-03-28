@@ -9,7 +9,7 @@ from datetime import datetime
 from utils import time_diff
 
 DENOISE_PASSES = 1
-CONTRAST_STRENGTH = 1.1
+CONTRAST_STRENGTH = 1.0
 BLACK_LEVEL = 2000
 SHARPEN_STRENGTH = 2
 
@@ -541,9 +541,9 @@ def diff(im1, im2, name):
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
     if im1.dimensions() == 2:
-        output[x, y] = hl.abs(hl.i32(im1[x, y]) - hl.i32(im2[x, y]))
+        output[x, y] = hl.i32(im1[x, y]) - hl.i32(im2[x, y])
     else:
-        output[x, y, c] = hl.abs(hl.i32(im1[x, y, c]) - hl.i32(im2[x, y, c]))
+        output[x, y, c] = hl.i32(im1[x, y, c]) - hl.i32(im2[x, y, c])
 
     return output
 
@@ -723,13 +723,13 @@ def tone_map(input, width, height, compression, gain):
 
     dark = grayscale
 
-    num_passes = 3
+    num_passes = 4
 
-    comp_const = 1 + compression / num_passes
-    gain_const = 1 + gain / num_passes
+    comp_const = 1
+    gain_const = 1
 
-    comp_slope = (compression - comp_const) / (num_passes - 1)
-    gain_slope = (gain - gain_const) / (num_passes - 1)
+    comp_slope = (compression - comp_const) / (num_passes)
+    gain_slope = (gain - gain_const) / (num_passes)
 
     for i in range(num_passes):
         print('    pass', i)
