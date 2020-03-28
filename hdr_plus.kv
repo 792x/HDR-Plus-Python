@@ -35,7 +35,7 @@ Root:
                         size_hint_x: 0.3
                         text: str(compression.value)[:3]
                 Label:
-                    text: 'gain'
+                    text: 'Gain'
                 BoxLayout:
                     orientation: 'horizontal'
                     Slider:
@@ -72,6 +72,9 @@ Root:
             Button:
                 text: 'Select burst'
                 on_release: root.show_load()
+            Button:
+                text: 'Process'
+                on_release: root.process()            
 
 <LoadDialog>:
     BoxLayout:

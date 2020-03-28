@@ -9,6 +9,8 @@ import multiprocessing
 import halide as hl
 from datetime import datetime
 import traceback
+import threading
+from functools import partial
 
 os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line if debugging UI
 import kivy
@@ -21,6 +23,8 @@ from kivy.uix.image import Image
 from kivy.logger import Logger
 from kivy.uix.label import Label
 from kivy.uix.button import Button
+from kivy.uix.progressbar import ProgressBar
+from kivy.clock import Clock
 
 from utils import time_diff
 
@@ -155,13 +159,14 @@ burst_path : str
 
 Returns: str, str (paths to the reference and HDR images, respectively)
 '''
-def HDR(burst_path, compression, gain, contrast, state):
+def HDR(burst_path, compression, gain, contrast, UI):
     start = datetime.utcnow()
 
     print(f'Compression: {compression}, gain: {gain}, contrast: {contrast}')
 
     # Load the images
     images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point, cfa_pattern, ccm = load_images(burst_path)
+    Clock.schedule_once(partial(UI.update_progress, 20))
 
     # dimensions of image should be 3
     assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"
@@ -170,22 +175,21 @@ def HDR(burst_path, compression, gain, contrast, state):
     imageio.imsave('Output/input.jpg', ref_img)
 
     # Align the images
-    state.text = 'Aligning'
     alignment = align_images(images)
 
     # Merge the images
-    state.text = 'Merging'
     merged = merge_images(images, alignment)
 
     # Finish the image
     print(f'\n{"=" * 30}\nFinishing image...\n{"=" * 30}')
-    state.text = 'Finishing'
     start_finish = datetime.utcnow()
     finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, contrast, cfa_pattern, ccm)
 
+    Clock.schedule_once(partial(UI.update_progress, 30))
+
     result = finished.realize(images.width(), images.height(), 3)
 
-    state.text = 'Finished'
+    Clock.schedule_once(partial(UI.update_progress, 90))
 
     print(f'Finishing finished in {time_diff(start_finish)} ms.\n')
 
@@ -197,9 +201,17 @@ def HDR(burst_path, compression, gain, contrast, state):
 
     imageio.imsave('Output/output.jpg', result)
 
+    Clock.schedule_once(partial(UI.update_progress, 100))
+
     print(f'Processed in: {time_diff(start)} ms')
 
-    return 'Output/input.jpg', 'Output/output.jpg'
+    # return 'Output/input.jpg', 'Output/output.jpg'
+
+    Clock.schedule_once(partial(UI.update_paths, 'Output/input.jpg', 'Output/output.jpg'))
+
+    Clock.schedule_once(UI.dismiss_progress)
+
+    return
 
 
 class Imglayout(FloatLayout):
@@ -223,7 +235,9 @@ class LoadDialog(FloatLayout):
 
 
 class Root(FloatLayout):
+
     loadfile = ObjectProperty(None)
+    progress_bar = ObjectProperty()
 
     # Empty gallery images
     original = 'Images/gallery.jpg'
@@ -244,46 +258,75 @@ class Root(FloatLayout):
 
     def dismiss_popup(self):
         self._popup.dismiss()
+    
+    def dismiss_progress(self, *largs):
+        self.progress_popup.dismiss()
+    
+    def update_progress(self, num, *largs):
+        print(f'Attempting to update progress bar to {num}')
+        self.progress_bar.value = num
+    
+    def update_paths(self, input_path, output_path, *largs):
+        print(f'Setting paths: {input_path}, {output_path}')
+        self.original = input_path
+        self.image = output_path
+    
+    def reload_images(self, instance):
+        print(f'Original path: {self.original}')
+        print(f'Image path: {self.image}')
+        self.ids.image0.source = self.original
+        self.ids.image0.reload()
+        self.ids.image1.source = self.image
+        self.ids.image1.reload()
+    
+    def next(self, dt):
+        if self.progress_bar.value >= 100:
+            return False
+        self.progress_bar.value += 1
+    
+    # Function to call the HDR+ pipeline
+    def process(self):
+        try:
+            if not self.path:
+                raise ValueError('No burst selected.')
+            # Get slider values for compression, gain, and contrast
+            self.compression = self.ids.compression.value
+            self.gain = self.ids.gain.value
+            self.contrast = self.ids.contrast.value
+
+            self.progress_bar = ProgressBar()
+            self.progress_popup = Popup(title = f'Processing {self.path}',
+                                        content = self.progress_bar,
+                                        size_hint = (0.7, 0.2),
+                                        auto_dismiss = False)
+            self.progress_popup.bind(on_dismiss=self.reload_images)
+            self.progress_bar.value = 1
+            self.progress_popup.open()
+            Clock.schedule_interval(self.next, 0.1)
+
+            HDR_thread = threading.Thread(target=HDR, args=(self.path, self.compression, self.gain, self.contrast, self,))
+            HDR_thread.start()
+
+        except Exception as e:
+            print(traceback.format_exc())
+            txt = '\n'.join(str(e)[i:i+80] for i in range(0, len(str(e)), 80))
+            float_popup = FloatLayout(size_hint = (0.9, .04))
+            float_popup.add_widget(Label(text=txt,
+                                            size_hint = (0.7, 1),
+                                            pos_hint = {'x': 0.15, 'y': 12}))
+            float_popup.add_widget(Button(text = 'Close',
+                                            on_press = lambda *args: popup.dismiss(),
+                                            size_hint = (0.2, 4),
+                                            pos_hint = {'x': 0.4, 'y': 1}))
+            popup = Popup(title = 'Error',
+                            content = float_popup,
+                            size_hint = (0.9, 0.4))
+            popup.open()
 
     def show_load(self):
-        # Function to call the HDR+ pipeline
-        def HDR_callback(instance):
-            try:
-                # Get slider values for compression, gain, and contrast
-                self.compression = self.ids.compression.value
-                self.gain = self.ids.gain.value
-                self.contrast = self.ids.contrast.value
-
-                original_path, image_path = HDR(self.path, self.compression, self.gain, self.contrast, self.ids.state)
-                self.original = original_path
-                self.image = image_path
-                self.ids.image0.source = self.original
-                self.ids.image0.reload()
-                self.ids.image1.source = self.image
-                self.ids.image1.reload()
-            except Exception as e:
-                if not self.cancel:
-                    print(traceback.format_exc())
-                    txt = '\n'.join(str(e)[i:i+80] for i in range(0, len(str(e)), 80))
-                    float_popup = FloatLayout(size_hint = (0.9, .04))
-                    float_popup.add_widget(Label(text=txt,
-                                                 size_hint = (0.7, 1),
-                                                 pos_hint = {'x': 0.15, 'y': 12}))
-                    float_popup.add_widget(Button(text = 'Close',
-                                                  on_press = lambda *args: popup.dismiss(),
-                                                  size_hint = (0.2, 4),
-                                                  pos_hint = {'x': 0.4, 'y': 1}))
-                    popup = Popup(title = 'Error',
-                                  content = float_popup,
-                                  size_hint = (0.9, 0.4))
-                    popup.open()
-
         content = LoadDialog(load=self.load, cancel=self.dismiss_popup)
         self._popup = Popup(title="Select burst image", content=content,
                             size_hint=(0.9, 0.9))
-
-        # When a file is chosen, call the HDR+ pipeline
-        self._popup.bind(on_dismiss=HDR_callback)
 
         self._popup.open()
 
