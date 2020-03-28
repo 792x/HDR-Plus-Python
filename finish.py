@@ -9,7 +9,7 @@ from datetime import datetime
 from utils import time_diff
 
 DENOISE_PASSES = 1
-CONTRAST_STRENGTH = 5
+CONTRAST_STRENGTH = 1.1
 BLACK_LEVEL = 2000
 SHARPEN_STRENGTH = 2
 
@@ -74,7 +74,7 @@ def demosaic(input, width, height):
 
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
     r0 = hl.RDom([(-2, 5), (-2, 5)])
-    r1 = hl.RDom([(0, width / 2), (0, height / 2)])
+    # r1 = hl.RDom([(0, width / 2), (0, height / 2)])
 
     input_mirror = hl.BoundaryConditions.mirror_interior(input, [(0, width), (0, height)])
 
@@ -364,7 +364,7 @@ def gauss_15x15(input, name):
     k = hl.Buffer(hl.Float(32), [15], "gauss_15x15")
     k.translate([-7])
 
-    x = hl.Var("x")
+    # x = hl.Var("x")
     r = hl.RDom([(-7, 15)])
 
     k.fill(0)
@@ -521,7 +521,6 @@ def gauss_7x7(input, name):
     k = hl.Buffer(hl.Float(32), [7], "gauss_7x7_kernel")
     k.translate([-3])
 
-    x = hl.Var("x")
     r = hl.RDom([(-3, 7)])
 
     k.fill(0)
@@ -608,6 +607,41 @@ def combine(im1, im2, width, height, dist):
 
     for i in range(num_layers):
         accumulator.update(i).parallel(y).vectorize(x, 16)
+
+    return output
+
+
+def combine2(im1, im2, width, height, dist):
+    init_mask1 = hl.Func("mask1_layer_0")
+    init_mask2 = hl.Func("mask2_layer_0")
+    accumulator = hl.Func("combine_accumulator")
+    output = hl.Func("combine_output")
+
+    x, y = hl.Var("x"), hl.Var("y")
+
+    im1_mirror = hl.BoundaryConditions.repeat_edge(im1, [(0, width), (0, height)])
+    im2_mirror = hl.BoundaryConditions.repeat_edge(im2, [(0, width), (0, height)])
+
+    weight1 = hl.f32(dist[im1_mirror[x, y]])
+    weight2 = hl.f32(dist[im2_mirror[x, y]])
+
+    init_mask1[x, y] = weight1 / (weight1 + weight2)
+    init_mask2[x, y] = 1 - init_mask1[x, y]
+
+    mask1 = init_mask1
+    mask2 = init_mask2
+
+    accumulator[x, y] = hl.i32(0)
+
+    accumulator[x, y] += hl.i32(im1_mirror[x, y] * mask1[x, y]) + hl.i32(im2_mirror[x, y] * mask2[x, y])
+
+    output[x, y] = hl.u16_sat(accumulator[x, y])
+
+    init_mask1.compute_root().parallel(y).vectorize(x, 16)
+
+    accumulator.compute_root().parallel(y).vectorize(x, 16)
+
+    accumulator.update(0).parallel(y).vectorize(x, 16)
 
     return output
 
@@ -708,11 +742,11 @@ def tone_map(input, width, height, compression, gain):
         dark_gamma = gamma_correct(dark)
         bright_gamma = gamma_correct(bright)
 
-        dark_gamma = combine(dark_gamma, bright_gamma, width, height, normal_dist)
+        dark_gamma = combine2(dark_gamma, bright_gamma, width, height, normal_dist)
 
         dark = brighten(gamma_inverse(dark_gamma), norm_gain)
 
-    output[x, y, c] = hl.u16_sat(hl.u32(input[x, y, c]) * hl.u32(dark[x, y]) / hl.u16(hl.max(1, grayscale[x, y])))
+    output[x, y, c] = hl.u16_sat(hl.u32(input[x, y, c]) * hl.u32(dark[x, y]) / hl.u32(hl.max(1, grayscale[x, y])))
 
     grayscale.compute_root().parallel(y).vectorize(x, 16)
 
@@ -742,7 +776,7 @@ def contrast(input, strength, black_point):
 
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
-    scale = 0.8 + 0.3 / min(1, strength)
+    scale = strength
 
     inner_constant = math.pi / (2 * scale)
     sin_constant = hl.sin(inner_constant)
@@ -787,9 +821,9 @@ def sharpen(input, strength):
 def u8bit_interleaved(input):
     output = hl.Func("8bit_interleaved_output")
 
-    c, x, y = hl.Var("c"), hl.Var("x"), hl.Var("y")
+    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
-    output[c, x, y] = hl.u8_sat(input[x, y, c] / 256)
+    output[x, y, c] = hl.u8_sat(input[x, y, c] / 256)
 
     output.compute_root().parallel(y).vectorize(x, 16)
 
@@ -813,7 +847,7 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     
     print("bayer_to_rggb")
     bayer_shifted = shift_bayer_to_rggb(imgs, cfa_pattern)
-    
+
     print("black_white_level")
     black_white_level_output = black_white_level(bayer_shifted, black_point, white_point)
     
@@ -830,11 +864,11 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     print("srgb")
     srgb_output = srgb(chroma_denoised_output, ccm)
 
-    # print("tone_map")
-    # tone_map_output = tone_map(srgb_output, width, height, compression, gain)
-    #
+    print("tone_map")
+    tone_map_output = tone_map(srgb_output, width, height, compression, gain)
+    
     print("gamma_correct")
-    gamma_correct_output = gamma_correct(srgb_output)
+    gamma_correct_output = gamma_correct(tone_map_output)
 
     print('contrast')
     contrast_output = contrast(gamma_correct_output, CONTRAST_STRENGTH, black_point)
@@ -843,6 +877,6 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     sharpen_output = sharpen(contrast_output, SHARPEN_STRENGTH)
 
     print('u8bit_interleave')
-    u8bit_interleaved_output = u8bit_interleaved(srgb_output)
+    u8bit_interleaved_output = u8bit_interleaved(sharpen_output)
 
     return u8bit_interleaved_output

@@ -39,7 +39,7 @@ Returns: numpy ndarray with 3 values for each pixel
 '''
 def load_image(image_path):
     with rawpy.imread(image_path) as raw:
-        image = raw.raw_image_visible
+        image = raw.raw_image_visible.copy()
         return image
 
 
@@ -126,8 +126,8 @@ def load_images(burst_path):
         white_balance = raw.camera_whitebalance
         print('white balance', white_balance)
         white_balance_r = white_balance[0] / white_balance[1]
-        white_balance_g0 = white_balance[1]
-        white_balance_g1 = white_balance[1]
+        white_balance_g0 = 1
+        white_balance_g1 = 1
         white_balance_b = white_balance[2] / white_balance[1]
         cfa_pattern = raw.raw_pattern
         cfa_pattern = decode_pattern(cfa_pattern)
@@ -178,12 +178,15 @@ def HDR(burst_path, compression, gain):
     start_finish = datetime.utcnow()
     finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, cfa_pattern, ccm)
 
-    result = finished.realize(3, images.width(), images.height())
-
-    result.transpose(0, 1)
-    result.transpose(1, 2)
+    result = finished.realize(images.width(), images.height(), 3)
 
     print(f'Finishing finished in {time_diff(start_finish)} ms.\n')
+
+    # If portrait orientation, rotate image 90 degrees clockwise
+    print(ref_img.shape)
+    if ref_img.shape[0] > ref_img.shape[1]:
+        print('Rotating image')
+        result = np.rot90(result, -1)
 
     imageio.imsave('Output/output.jpg', result)
 
