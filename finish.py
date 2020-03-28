@@ -9,8 +9,6 @@ from datetime import datetime
 from utils import time_diff
 
 DENOISE_PASSES = 1
-CONTRAST_STRENGTH = 1.0
-BLACK_LEVEL = 2000
 SHARPEN_STRENGTH = 2
 
 
@@ -840,7 +838,7 @@ image : numpy ndarray
 Returns: numpy ndarray (finished image)
 '''
 def finish_image(imgs, width, height, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
-                 white_balance_b, compression, gain, cfa_pattern, ccm):
+                 white_balance_b, compression, gain, contrast_strength, cfa_pattern, ccm):
 
     print(black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
                  white_balance_b, compression, gain)
@@ -871,7 +869,7 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     gamma_correct_output = gamma_correct(tone_map_output)
 
     print('contrast')
-    contrast_output = contrast(gamma_correct_output, CONTRAST_STRENGTH, black_point)
+    contrast_output = contrast(gamma_correct_output, contrast_strength, black_point)
 
     print('sharpen')
     sharpen_output = sharpen(contrast_output, SHARPEN_STRENGTH)

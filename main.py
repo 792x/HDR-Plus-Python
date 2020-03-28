@@ -132,7 +132,7 @@ def load_images(burst_path):
         cfa_pattern = raw.raw_pattern
         cfa_pattern = decode_pattern(cfa_pattern)
         ccm = raw.color_matrix
-        black_point = int(sum(raw.black_level_per_channel) / len(raw.black_level_per_channel))
+        black_point = int(raw.black_level_per_channel[0])
         white_point = int(raw.white_level)
 
         ref_img = raw.postprocess(output_bps=16)
@@ -155,8 +155,10 @@ burst_path : str
 
 Returns: str, str (paths to the reference and HDR images, respectively)
 '''
-def HDR(burst_path, compression, gain):
+def HDR(burst_path, compression, gain, contrast, state):
     start = datetime.utcnow()
+
+    print(f'Compression: {compression}, gain: {gain}, contrast: {contrast}')
 
     # Load the images
     images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point, cfa_pattern, ccm = load_images(burst_path)
@@ -168,17 +170,22 @@ def HDR(burst_path, compression, gain):
     imageio.imsave('Output/input.jpg', ref_img)
 
     # Align the images
+    state.text = 'Aligning'
     alignment = align_images(images)
 
     # Merge the images
+    state.text = 'Merging'
     merged = merge_images(images, alignment)
 
     # Finish the image
     print(f'\n{"=" * 30}\nFinishing image...\n{"=" * 30}')
+    state.text = 'Finishing'
     start_finish = datetime.utcnow()
-    finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, cfa_pattern, ccm)
+    finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, contrast, cfa_pattern, ccm)
 
     result = finished.realize(images.width(), images.height(), 3)
+
+    state.text = 'Finished'
 
     print(f'Finishing finished in {time_diff(start_finish)} ms.\n')
 
@@ -227,6 +234,10 @@ class Root(FloatLayout):
 
     cancel = False
 
+    compression = 3.8
+    gain = 1.1
+    contrast = 1.0
+
     def build():
         c = Imglayout()
         root.add_widget(c)
@@ -238,8 +249,12 @@ class Root(FloatLayout):
         # Function to call the HDR+ pipeline
         def HDR_callback(instance):
             try:
-                # Default values for compression and gain
-                original_path, image_path = HDR(self.path, 3.8, 1.1)
+                # Get slider values for compression, gain, and contrast
+                self.compression = self.ids.compression.value
+                self.gain = self.ids.gain.value
+                self.contrast = self.ids.contrast.value
+
+                original_path, image_path = HDR(self.path, self.compression, self.gain, self.contrast, self.ids.state)
                 self.original = original_path
                 self.image = image_path
                 self.ids.image0.source = self.original
