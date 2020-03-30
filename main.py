@@ -12,7 +12,7 @@ import traceback
 import threading
 from functools import partial
 
-os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line if debugging UI
+# os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line if debugging UI
 import kivy
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
@@ -160,58 +160,60 @@ burst_path : str
 Returns: str, str (paths to the reference and HDR images, respectively)
 '''
 def HDR(burst_path, compression, gain, contrast, UI):
-    start = datetime.utcnow()
+    try:
+        start = datetime.utcnow()
 
-    print(f'Compression: {compression}, gain: {gain}, contrast: {contrast}')
+        print(f'Compression: {compression}, gain: {gain}, contrast: {contrast}')
 
-    # Load the images
-    images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point, cfa_pattern, ccm = load_images(burst_path)
-    Clock.schedule_once(partial(UI.update_progress, 20))
+        # Load the images
+        images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point, cfa_pattern, ccm = load_images(burst_path)
+        Clock.schedule_once(partial(UI.update_progress, 20))
 
-    # dimensions of image should be 3
-    assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"
-    assert images.dim(2).extent() >= 2, f"Must have at least one alternate image"
-    # Save the reference image
-    imageio.imsave('Output/input.jpg', ref_img)
+        # dimensions of image should be 3
+        assert images.dimensions() == 3, f"Incorrect buffer dimensions, expected 3 but got {images.dimensions()}"
+        assert images.dim(2).extent() >= 2, f"Must have at least one alternate image"
+        # Save the reference image
+        imageio.imsave('Output/input.jpg', ref_img)
 
-    # Align the images
-    alignment = align_images(images)
+        # Align the images
+        alignment = align_images(images)
 
-    # Merge the images
-    merged = merge_images(images, alignment)
+        # Merge the images
+        merged = merge_images(images, alignment)
 
-    # Finish the image
-    print(f'\n{"=" * 30}\nFinishing image...\n{"=" * 30}')
-    start_finish = datetime.utcnow()
-    finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, contrast, cfa_pattern, ccm)
+        # Finish the image
+        print(f'\n{"=" * 30}\nFinishing image...\n{"=" * 30}')
+        start_finish = datetime.utcnow()
+        finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, contrast, cfa_pattern, ccm)
 
-    Clock.schedule_once(partial(UI.update_progress, 30))
+        Clock.schedule_once(partial(UI.update_progress, 30))
 
-    result = finished.realize(images.width(), images.height(), 3)
+        result = finished.realize(images.width(), images.height(), 3)
 
-    Clock.schedule_once(partial(UI.update_progress, 90))
+        Clock.schedule_once(partial(UI.update_progress, 90))
 
-    print(f'Finishing finished in {time_diff(start_finish)} ms.\n')
+        print(f'Finishing finished in {time_diff(start_finish)} ms.\n')
 
-    # If portrait orientation, rotate image 90 degrees clockwise
-    print(ref_img.shape)
-    if ref_img.shape[0] > ref_img.shape[1]:
-        print('Rotating image')
-        result = np.rot90(result, -1)
+        # If portrait orientation, rotate image 90 degrees clockwise
+        print(ref_img.shape)
+        if ref_img.shape[0] > ref_img.shape[1]:
+            print('Rotating image')
+            result = np.rot90(result, -1)
 
-    imageio.imsave('Output/output.jpg', result)
+        imageio.imsave('Output/output.jpg', result)
 
-    Clock.schedule_once(partial(UI.update_progress, 100))
+        Clock.schedule_once(partial(UI.update_progress, 100))
 
-    print(f'Processed in: {time_diff(start)} ms')
+        print(f'Processed in: {time_diff(start)} ms')
 
-    # return 'Output/input.jpg', 'Output/output.jpg'
+        # return 'Output/input.jpg', 'Output/output.jpg'
 
-    Clock.schedule_once(partial(UI.update_paths, 'Output/input.jpg', 'Output/output.jpg'))
+        Clock.schedule_once(partial(UI.update_paths, 'Output/input.jpg', 'Output/output.jpg'))
 
-    Clock.schedule_once(UI.dismiss_progress)
+        Clock.schedule_once(UI.dismiss_progress)
 
-    return
+    except Exception as e:
+        Clock.schedule_once(partial(UI.show_error, e))
 
 
 class Imglayout(FloatLayout):
@@ -238,6 +240,7 @@ class Root(FloatLayout):
 
     loadfile = ObjectProperty(None)
     progress_bar = ObjectProperty()
+    progress_popup = None
 
     # Empty gallery images
     original = 'Images/gallery.jpg'
@@ -284,6 +287,23 @@ class Root(FloatLayout):
             return False
         self.progress_bar.value += 1
     
+    def show_error(self, error, *largs):
+        if self.progress_popup:
+            self.dismiss_progress()
+        txt = '\n'.join(str(error)[i:i+80] for i in range(0, len(str(error)), 80))
+        float_popup = FloatLayout(size_hint = (0.9, .04))
+        float_popup.add_widget(Label(text=txt,
+                                        size_hint = (0.7, 1),
+                                        pos_hint = {'x': 0.15, 'y': 12}))
+        float_popup.add_widget(Button(text = 'Close',
+                                        on_press = lambda *args: popup.dismiss(),
+                                        size_hint = (0.2, 4),
+                                        pos_hint = {'x': 0.4, 'y': 1}))
+        popup = Popup(title = 'Error',
+                        content = float_popup,
+                        size_hint = (0.9, 0.4))
+        popup.open()
+    
     # Function to call the HDR+ pipeline
     def process(self):
         try:
@@ -308,20 +328,7 @@ class Root(FloatLayout):
             HDR_thread.start()
 
         except Exception as e:
-            print(traceback.format_exc())
-            txt = '\n'.join(str(e)[i:i+80] for i in range(0, len(str(e)), 80))
-            float_popup = FloatLayout(size_hint = (0.9, .04))
-            float_popup.add_widget(Label(text=txt,
-                                            size_hint = (0.7, 1),
-                                            pos_hint = {'x': 0.15, 'y': 12}))
-            float_popup.add_widget(Button(text = 'Close',
-                                            on_press = lambda *args: popup.dismiss(),
-                                            size_hint = (0.2, 4),
-                                            pos_hint = {'x': 0.4, 'y': 1}))
-            popup = Popup(title = 'Error',
-                            content = float_popup,
-                            size_hint = (0.9, 0.4))
-            popup.open()
+            self.show_error(e)
 
     def show_load(self):
         content = LoadDialog(load=self.load, cancel=self.dismiss_popup)
