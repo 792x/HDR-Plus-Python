@@ -1,37 +1,26 @@
-import cv2 as cv
+
 import numpy as np
 import rawpy
 import imageio
-import math
 import os
-import sys
 import multiprocessing
 import halide as hl
 from datetime import datetime
-import traceback
 import threading
 from functools import partial
-
-# os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line if debugging UI
-import kivy
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
 from kivy.factory import Factory
 from kivy.properties import ObjectProperty
 from kivy.uix.popup import Popup
-from kivy.uix.image import Image
-from kivy.logger import Logger
 from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.uix.progressbar import ProgressBar
 from kivy.clock import Clock
-
 from utils import time_diff
-
 from align import align_images
 from merge import merge_images
 from finish import finish_image
-
 
 '''
 Loads a raw image
@@ -41,6 +30,8 @@ image_path : str
 
 Returns: numpy ndarray with 3 values for each pixel
 '''
+
+
 def load_image(image_path):
     with rawpy.imread(image_path) as raw:
         image = raw.raw_image_visible.copy()
@@ -55,6 +46,8 @@ image : numpy ndarray
 
 Returns: numpy ndarray, where each pixel has one value (average of 3 given values)
 '''
+
+
 def to_grayscale(image):
     return np.mean(image, axis=2)
 
@@ -89,8 +82,10 @@ burst_path : str
 
 Returns: list of raw images, list of grayscale images, reference image
 '''
+
+
 def load_images(burst_path):
-    print(f'\n{"="*30}\nLoading images...\n{"="*30}')
+    print(f'\n{"=" * 30}\nLoading images...\n{"=" * 30}')
     start = datetime.utcnow()
     images = []
     white_balance_r = 0
@@ -115,10 +110,10 @@ def load_images(burst_path):
             if i == 0:
                 raise ValueError("Burst format not recognized.")
             break
-    
+
     # Load raw images
     print('Loading raw images...')
-    p = multiprocessing.Pool(min(multiprocessing.cpu_count()-1, len(paths)))
+    p = multiprocessing.Pool(min(multiprocessing.cpu_count() - 1, len(paths)))
     for image in p.imap(load_image, paths):
         images.append(hl.Buffer(image))
 
@@ -159,6 +154,8 @@ burst_path : str
 
 Returns: str, str (paths to the reference and HDR images, respectively)
 '''
+
+
 def HDR(burst_path, compression, gain, contrast, UI):
     try:
         start = datetime.utcnow()
@@ -166,7 +163,8 @@ def HDR(burst_path, compression, gain, contrast, UI):
         print(f'Compression: {compression}, gain: {gain}, contrast: {contrast}')
 
         # Load the images
-        images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point, cfa_pattern, ccm = load_images(burst_path)
+        images, ref_img, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, black_point, white_point, cfa_pattern, ccm = load_images(
+            burst_path)
         Clock.schedule_once(partial(UI.update_progress, 20))
 
         # dimensions of image should be 3
@@ -184,7 +182,9 @@ def HDR(burst_path, compression, gain, contrast, UI):
         # Finish the image
         print(f'\n{"=" * 30}\nFinishing image...\n{"=" * 30}')
         start_finish = datetime.utcnow()
-        finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1, white_balance_b, compression, gain, contrast, cfa_pattern, ccm)
+        finished = finish_image(merged, images.width(), images.height(), black_point, white_point, white_balance_r,
+                                white_balance_g0, white_balance_g1, white_balance_b, compression, gain, contrast,
+                                cfa_pattern, ccm)
 
         Clock.schedule_once(partial(UI.update_progress, 30))
 
@@ -222,9 +222,9 @@ class Imglayout(FloatLayout):
 
         with self.canvas.before:
             Color(0, 0, 0, 0)
-            self.rect = Rectangle(size=self.size,pos=self.pos)
+            self.rect = Rectangle(size=self.size, pos=self.pos)
 
-        self.bind(size=self.updates,pos=self.updates)
+        self.bind(size=self.updates, pos=self.updates)
 
     def updates(self, instance, value):
         self.rect.size = instance.size
@@ -237,7 +237,6 @@ class LoadDialog(FloatLayout):
 
 
 class Root(FloatLayout):
-
     loadfile = ObjectProperty(None)
     progress_bar = ObjectProperty()
     progress_popup = None
@@ -261,19 +260,19 @@ class Root(FloatLayout):
 
     def dismiss_popup(self):
         self._popup.dismiss()
-    
+
     def dismiss_progress(self, *largs):
         self.progress_popup.dismiss()
-    
+
     def update_progress(self, num, *largs):
         print(f'Attempting to update progress bar to {num}')
         self.progress_bar.value = num
-    
+
     def update_paths(self, input_path, output_path, *largs):
         print(f'Setting paths: {input_path}, {output_path}')
         self.original = input_path
         self.image = output_path
-    
+
     def reload_images(self, instance):
         print(f'Original path: {self.original}')
         print(f'Image path: {self.image}')
@@ -281,29 +280,29 @@ class Root(FloatLayout):
         self.ids.image0.reload()
         self.ids.image1.source = self.image
         self.ids.image1.reload()
-    
+
     def next(self, dt):
         if self.progress_bar.value >= 100:
             return False
         self.progress_bar.value += 1
-    
+
     def show_error(self, error, *largs):
         if self.progress_popup:
             self.dismiss_progress()
-        txt = '\n'.join(str(error)[i:i+80] for i in range(0, len(str(error)), 80))
-        float_popup = FloatLayout(size_hint = (0.9, .04))
+        txt = '\n'.join(str(error)[i:i + 80] for i in range(0, len(str(error)), 80))
+        float_popup = FloatLayout(size_hint=(0.9, .04))
         float_popup.add_widget(Label(text=txt,
-                                        size_hint = (0.7, 1),
-                                        pos_hint = {'x': 0.15, 'y': 12}))
-        float_popup.add_widget(Button(text = 'Close',
-                                        on_press = lambda *args: popup.dismiss(),
-                                        size_hint = (0.2, 4),
-                                        pos_hint = {'x': 0.4, 'y': 1}))
-        popup = Popup(title = 'Error',
-                        content = float_popup,
-                        size_hint = (0.9, 0.4))
+                                     size_hint=(0.7, 1),
+                                     pos_hint={'x': 0.15, 'y': 12}))
+        float_popup.add_widget(Button(text='Close',
+                                      on_press=lambda *args: popup.dismiss(),
+                                      size_hint=(0.2, 4),
+                                      pos_hint={'x': 0.4, 'y': 1}))
+        popup = Popup(title='Error',
+                      content=float_popup,
+                      size_hint=(0.9, 0.4))
         popup.open()
-    
+
     # Function to call the HDR+ pipeline
     def process(self):
         try:
@@ -315,16 +314,17 @@ class Root(FloatLayout):
             self.contrast = self.ids.contrast.value
 
             self.progress_bar = ProgressBar()
-            self.progress_popup = Popup(title = f'Processing {self.path}',
-                                        content = self.progress_bar,
-                                        size_hint = (0.7, 0.2),
-                                        auto_dismiss = False)
+            self.progress_popup = Popup(title=f'Processing {self.path}',
+                                        content=self.progress_bar,
+                                        size_hint=(0.7, 0.2),
+                                        auto_dismiss=False)
             self.progress_popup.bind(on_dismiss=self.reload_images)
             self.progress_bar.value = 1
             self.progress_popup.open()
             Clock.schedule_interval(self.next, 0.1)
 
-            HDR_thread = threading.Thread(target=HDR, args=(self.path, self.compression, self.gain, self.contrast, self,))
+            HDR_thread = threading.Thread(target=HDR,
+                                          args=(self.path, self.compression, self.gain, self.contrast, self,))
             HDR_thread.start()
 
         except Exception as e:
@@ -342,7 +342,7 @@ class Root(FloatLayout):
         self.path = path
         self.cancel = False
         self.dismiss_popup()
-    
+
     def cancel(self):
         self.cancel = True
         self.dismiss_popup()
@@ -354,7 +354,6 @@ class HDR_Plus(App):
 
 Factory.register('Root', cls=Root)
 Factory.register('LoadDialog', cls=LoadDialog)
-
 
 if __name__ == '__main__':
     HDR_Plus().run()

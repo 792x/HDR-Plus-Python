@@ -1,15 +1,8 @@
 import math
 
-import cv2 as cv
-import numpy as np
 import halide as hl
 
-from datetime import datetime
-
-from utils import time_diff
-
-DENOISE_PASSES = 1
-SHARPEN_STRENGTH = 2
+from utils import DENOISE_PASSES, TONE_MAP_PASSES, SHARPEN_STRENGTH
 
 
 def black_white_level(input, black_point, white_point):
@@ -31,21 +24,21 @@ def white_balance(input, width, height, white_balance_r, white_balance_g0, white
 
     x, y = hl.Var("x"), hl.Var("y")
 
-    r = hl.RDom([(0, width / 2), (0, height / 2)])
+    rdom = hl.RDom([(0, width / 2), (0, height / 2)])
 
     output[x, y] = hl.u16(0)
 
-    output[r.x * 2    , r.y * 2    ] = hl.u16_sat(white_balance_r  * hl.f32(input[r.x * 2    , r.y * 2    ]))
-    output[r.x * 2 + 1, r.y * 2    ] = hl.u16_sat(white_balance_g0 * hl.f32(input[r.x * 2 + 1, r.y * 2    ]))
-    output[r.x * 2    , r.y * 2 + 1] = hl.u16_sat(white_balance_g1 * hl.f32(input[r.x * 2    , r.y * 2 + 1]))
-    output[r.x * 2 + 1, r.y * 2 + 1] = hl.u16_sat(white_balance_b  * hl.f32(input[r.x * 2 + 1, r.y * 2 + 1]))
+    output[rdom.x * 2, rdom.y * 2] = hl.u16_sat(white_balance_r * hl.f32(input[rdom.x * 2, rdom.y * 2]))
+    output[rdom.x * 2 + 1, rdom.y * 2] = hl.u16_sat(white_balance_g0 * hl.f32(input[rdom.x * 2 + 1, rdom.y * 2]))
+    output[rdom.x * 2, rdom.y * 2 + 1] = hl.u16_sat(white_balance_g1 * hl.f32(input[rdom.x * 2, rdom.y * 2 + 1]))
+    output[rdom.x * 2 + 1, rdom.y * 2 + 1] = hl.u16_sat(white_balance_b * hl.f32(input[rdom.x * 2 + 1, rdom.y * 2 + 1]))
 
     output.compute_root().parallel(y).vectorize(x, 16)
 
-    output.update(0).parallel(r.y)
-    output.update(1).parallel(r.y)
-    output.update(2).parallel(r.y)
-    output.update(3).parallel(r.y)
+    output.update(0).parallel(rdom.y)
+    output.update(1).parallel(rdom.y)
+    output.update(2).parallel(rdom.y)
+    output.update(3).parallel(rdom.y)
 
     return output
 
@@ -71,8 +64,8 @@ def demosaic(input, width, height):
     output = hl.Func("demosaic_output")
 
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
-    r0 = hl.RDom([(-2, 5), (-2, 5)])
-    # r1 = hl.RDom([(0, width / 2), (0, height / 2)])
+    rdom0 = hl.RDom([(-2, 5), (-2, 5)])
+    # rdom1 = hl.RDom([(0, width / 2), (0, height / 2)])
 
     input_mirror = hl.BoundaryConditions.mirror_interior(input, [(0, width), (0, height)])
 
@@ -130,10 +123,10 @@ def demosaic(input, width, height):
     f3[1, 1] = 4
     f3[0, 2] = -3
 
-    d0[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + r0.x, y + r0.y]) * f0[r0.x, r0.y]) / f0_sum)
-    d1[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + r0.x, y + r0.y]) * f1[r0.x, r0.y]) / f1_sum)
-    d2[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + r0.x, y + r0.y]) * f2[r0.x, r0.y]) / f2_sum)
-    d3[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + r0.x, y + r0.y]) * f3[r0.x, r0.y]) / f3_sum)
+    d0[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + rdom0.x, y + rdom0.y]) * f0[rdom0.x, rdom0.y]) / f0_sum)
+    d1[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + rdom0.x, y + rdom0.y]) * f1[rdom0.x, rdom0.y]) / f1_sum)
+    d2[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + rdom0.x, y + rdom0.y]) * f2[rdom0.x, rdom0.y]) / f2_sum)
+    d3[x, y] = hl.u16_sat(hl.sum(hl.i32(input_mirror[x + rdom0.x, y + rdom0.y]) * f3[rdom0.x, rdom0.y]) / f3_sum)
 
     R_row = y % 2 == 0
     B_row = y % 2 != 0
@@ -162,120 +155,6 @@ def demosaic(input, width, height):
 
     return output
 
-    '''
-    f0 = hl.Func("demosaic_f0")
-    f1 = hl.Func("demosaic_f1")
-    f2 = hl.Func("demosaic_f2")
-    f3 = hl.Func("demosaic_f3")
-
-    d0 = hl.Func("demosaic_0")
-    d1 = hl.Func("demosaic_1")
-    d2 = hl.Func("demosaic_2")
-    d3 = hl.Func("demosaic_3")
-
-    output = hl.Func("demosaic_output")
-
-    x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
-    r0 = hl.RDom([(-2, 5), (-2, 5)])
-    r1 = hl.RDom([(0, width / 2), (0, height / 2)])
-
-    input_mirror = hl.BoundaryConditions.mirror_interior(input, [(0, width), (0, height)])
-
-    f0[x, y] = 0
-    f1[x, y] = 0
-    f2[x, y] = 0
-    f3[x, y] = 0
-
-    f0_sum = 8
-    f1_sum = 16
-    f2_sum = 16
-    f3_sum = 16
-
-    f0[0, -2] = -1
-    f0[0, -1] = 2
-    f0[-2, 0] = -1
-    f0[-1, 0] = 2
-    f0[0, 0] = 4
-    f0[1, 0] = 2
-    f0[2, 0] = -1
-    f0[0, 1] = 2
-    f0[0, 2] = -1
-
-    f1[0, -2] = 1
-    f1[-1, -1] = -2
-    f1[1, -1] = -2
-    f1[-2, 0] = -2
-    f1[-1, 0] = 8
-    f1[0, 0] = 10
-    f1[1, 0] = 8
-    f1[2, 0] = -2
-    f1[-1, 1] = -2
-    f1[1, 1] = -2
-    f1[0, 2] = 1
-
-    f2[0, -2] = -2
-    f2[-1, -1] = -2
-    f2[0, -1] = 8
-    f2[1, -1] = -2
-    f2[-2, 0] = 1
-    f2[0, 0] = 10
-    f2[2, 0] = 1
-    f2[-1, 1] = -2
-    f2[0, 1] = 8
-    f2[1, 1] = -2
-    f2[0, 2] = -2
-
-    f3[0, -2] = -3
-    f3[-1, -1] = 4
-    f3[1, -1] = 4
-    f3[-2, 0] = -3
-    f3[0, 0] = 12
-    f3[2, 0] = -3
-    f3[-1, 1] = 4
-    f3[1, 1] = 4
-    f3[0, 2] = -3
-
-    d0[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f0[r0.x, r0.y]) / f0_sum)
-    d1[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f1[r0.x, r0.y]) / f1_sum)
-    d2[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f2[r0.x, r0.y]) / f2_sum)
-    d3[x, y] = hl.u16_sat(hl.sum(hl.cast(hl.Int(32), (input_mirror[x + r0.x, y + r0.y])) * f3[r0.x, r0.y]) / f3_sum)
-
-    output[x, y, c] = input[x, y]
-
-    output[r1.x * 2 + 1,    r1.y * 2,       0   ] = d1[r1.x * 2 + 1,    r1.y * 2    ]
-    output[r1.x * 2,        r1.y * 2 + 1,   0   ] = d2[r1.x * 2,        r1.y * 2 + 1]
-    output[r1.x * 2 + 1,    r1.y * 2 + 1,   0   ] = d3[r1.x * 2 + 1,    r1.y * 2 + 1]
-
-    output[r1.x * 2,        r1.y * 2,       1   ] = d0[r1.x * 2,        r1.y * 2    ]
-    output[r1.x * 2 + 1,    r1.y * 2 + 1,   1   ] = d0[r1.x * 2 + 1,    r1.y * 2 + 1]
-
-    output[r1.x * 2,        r1.y * 2 + 1,   2   ] = d1[r1.x * 2,        r1.y * 2 + 1]
-    output[r1.x * 2 + 1,    r1.y * 2,       2   ] = d2[r1.x * 2 + 1,    r1.y * 2    ]
-    output[r1.x * 2,        r1.y * 2,       2   ] = d3[r1.x * 2,        r1.y * 2    ]
-
-    f0.compute_root().parallel(y).parallel(x)
-    f1.compute_root().parallel(y).parallel(x)
-    f2.compute_root().parallel(y).parallel(x)
-    f3.compute_root().parallel(y).parallel(x)
-
-    d0.compute_root().parallel(y).vectorize(x, 16)
-    d1.compute_root().parallel(y).vectorize(x, 16)
-    d2.compute_root().parallel(y).vectorize(x, 16)
-    d3.compute_root().parallel(y).vectorize(x, 16)
-
-    output.compute_root().parallel(y).vectorize(x, 16)
-
-    output.update(0).parallel(r1.y)
-    output.update(1).parallel(r1.y)
-    output.update(2).parallel(r1.y)
-    output.update(3).parallel(r1.y)
-    output.update(4).parallel(r1.y)
-    output.update(5).parallel(r1.y)
-    output.update(6).parallel(r1.y)
-    output.update(7).parallel(r1.y)
-
-    return output
-    '''
 
 def rgb_to_yuv(input):
     print('    rgb_to_yuv')
@@ -284,15 +163,15 @@ def rgb_to_yuv(input):
 
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
-    r = input[x, y, 0]
+    rdom = input[x, y, 0]
     g = input[x, y, 1]
     b = input[x, y, 2]
 
     output[x, y, c] = hl.f32(0)
 
-    output[x, y, 0] =   0.2989      * r + 0.587     * g + 0.114     * b
-    output[x, y, 1] =  -0.168935    * r - 0.331655  * g + 0.50059   * b
-    output[x, y, 2] =   0.499813    * r - 0.418531  * g +- 0.081282 * b
+    output[x, y, 0] = 0.2989 * rdom + 0.587 * g + 0.114 * b
+    output[x, y, 1] = -0.168935 * rdom - 0.331655 * g + 0.50059 * b
+    output[x, y, 2] = 0.499813 * rdom - 0.418531 * g + - 0.081282 * b
 
     output.compute_root().parallel(y).vectorize(x, 16)
 
@@ -301,6 +180,7 @@ def rgb_to_yuv(input):
     output.update(2).parallel(y).vectorize(x, 16)
 
     return output
+
 
 def bilateral_filter(input, width, height):
     print('    bilateral_filter')
@@ -314,20 +194,63 @@ def bilateral_filter(input, width, height):
     output = hl.Func("bilateral_filter_output")
 
     x, y, dx, dy, c = hl.Var("x"), hl.Var("y"), hl.Var("dx"), hl.Var("dy"), hl.Var("c")
-    r = hl.RDom([(-3, 7), (-3, 7)])
+    rdom = hl.RDom([(-3, 7), (-3, 7)])
 
     k.fill(0)
-    k[-3, -3] = 0.000690; k[-2, -3] = 0.002646; k[-1, -3] = 0.005923; k[0, -3] = 0.007748; k[1, -3] = 0.005923; k[2, -3] = 0.002646; k[3, -3] = 0.000690
-    k[-3, -2] = 0.002646; k[-2, -2] = 0.010149; k[-1, -2] = 0.022718; k[0, -2] = 0.029715; k[1, -2] = 0.022718; k[2, -2] = 0.010149; k[3, -2] = 0.002646
-    k[-3, -1] = 0.005923; k[-2, -1] = 0.022718; k[-1, -1] = 0.050855; k[0, -1] = 0.066517; k[1, -1] = 0.050855; k[2, -1] = 0.022718; k[3, -1] = 0.005923
-    k[-3,  0] = 0.007748; k[-2,  0] = 0.029715; k[-1,  0] = 0.066517; k[0,  0] = 0.087001; k[1,  0] = 0.066517; k[2,  0] = 0.029715; k[3,  0] = 0.007748
-    k[-3,  1] = 0.005923; k[-2,  1] = 0.022718; k[-1,  1] = 0.050855; k[0,  1] = 0.066517; k[1,  1] = 0.050855; k[2,  1] = 0.022718; k[3,  1] = 0.005923
-    k[-3,  2] = 0.002646; k[-2,  2] = 0.010149; k[-1,  2] = 0.022718; k[0,  2] = 0.029715; k[1,  2] = 0.022718; k[2,  2] = 0.010149; k[3,  2] = 0.002646
-    k[-3,  3] = 0.000690; k[-2,  3] = 0.002646; k[-1,  3] = 0.005923; k[0,  3] = 0.007748; k[1,  3] = 0.005923; k[2,  3] = 0.002646; k[3,  3] = 0.000690
+    k[-3, -3] = 0.000690
+    k[-2, -3] = 0.002646
+    k[-1, -3] = 0.005923
+    k[0, -3] = 0.007748
+    k[1, -3] = 0.005923
+    k[2, -3] = 0.002646
+    k[3, -3] = 0.000690
+    k[-3, -2] = 0.002646
+    k[-2, -2] = 0.010149
+    k[-1, -2] = 0.022718
+    k[0, -2] = 0.029715
+    k[1, -2] = 0.022718
+    k[2, -2] = 0.010149
+    k[3, -2] = 0.002646
+    k[-3, -1] = 0.005923
+    k[-2, -1] = 0.022718
+    k[-1, -1] = 0.050855
+    k[0, -1] = 0.066517
+    k[1, -1] = 0.050855
+    k[2, -1] = 0.022718
+    k[3, -1] = 0.005923
+    k[-3, 0] = 0.007748
+    k[-2, 0] = 0.029715
+    k[-1, 0] = 0.066517
+    k[0, 0] = 0.087001
+    k[1, 0] = 0.066517
+    k[2, 0] = 0.029715
+    k[3, 0] = 0.007748
+    k[-3, 1] = 0.005923
+    k[-2, 1] = 0.022718
+    k[-1, 1] = 0.050855
+    k[0, 1] = 0.066517
+    k[1, 1] = 0.050855
+    k[2, 1] = 0.022718
+    k[3, 1] = 0.005923
+    k[-3, 2] = 0.002646
+    k[-2, 2] = 0.010149
+    k[-1, 2] = 0.022718
+    k[0, 2] = 0.029715
+    k[1, 2] = 0.022718
+    k[2, 2] = 0.010149
+    k[3, 2] = 0.002646
+    k[-3, 3] = 0.000690
+    k[-2, 3] = 0.002646
+    k[-1, 3] = 0.005923
+    k[0, 3] = 0.007748
+    k[1, 3] = 0.005923
+    k[2, 3] = 0.002646
+    k[3, 3] = 0.000690
 
     input_mirror = hl.BoundaryConditions.mirror_interior(input, [(0, width), (0, height)])
 
-    dist = hl.cast(hl.Float(32), hl.cast(hl.Int(32), input_mirror[x, y, c]) - hl.cast(hl.Int(32), input_mirror[x + dx, y + dy, c]))
+    dist = hl.cast(hl.Float(32),
+                   hl.cast(hl.Int(32), input_mirror[x, y, c]) - hl.cast(hl.Int(32), input_mirror[x + dx, y + dy, c]))
 
     sig2 = 100
 
@@ -337,9 +260,10 @@ def bilateral_filter(input, width, height):
 
     weights[dx, dy, x, y, c] = k[dx, dy] * score
 
-    total_weights[x, y, c] = hl.sum(weights[r.x, r.y, x, y, c])
+    total_weights[x, y, c] = hl.sum(weights[rdom.x, rdom.y, x, y, c])
 
-    bilateral[x, y, c] = hl.sum(input_mirror[x + r.x, y + r.y, c] * weights[r.x, r.y, x, y, c]) / total_weights[x, y, c]
+    bilateral[x, y, c] = hl.sum(input_mirror[x + rdom.x, y + rdom.y, c] * weights[rdom.x, rdom.y, x, y, c]) / \
+                         total_weights[x, y, c]
 
     output[x, y, c] = hl.cast(hl.Float(32), input[x, y, c])
 
@@ -349,7 +273,7 @@ def bilateral_filter(input, width, height):
     weights.compute_at(output, y).vectorize(x, 16)
 
     output.compute_root().parallel(y).vectorize(x, 16)
-    
+
     output.update(0).parallel(y).vectorize(x, 16)
     output.update(1).parallel(y).vectorize(x, 16)
 
@@ -362,14 +286,26 @@ def gauss_15x15(input, name):
     k = hl.Buffer(hl.Float(32), [15], "gauss_15x15")
     k.translate([-7])
 
-    # x = hl.Var("x")
-    r = hl.RDom([(-7, 15)])
+    rdom = hl.RDom([(-7, 15)])
 
     k.fill(0)
-    k[-7] = 0.004961; k[-6] = 0.012246; k[-5] = 0.026304; k[-4] = 0.049165; k[-3] = 0.079968; k[-2] = 0.113193; k[-1] = 0.139431; k[0] = 0.149464
-    k[ 7] = 0.004961; k[ 6] = 0.012246; k[ 5] = 0.026304; k[ 4] = 0.049165; k[ 3] = 0.079968; k[ 2] = 0.113193; k[ 1] = 0.139431
+    k[-7] = 0.004961
+    k[-6] = 0.012246
+    k[-5] = 0.026304
+    k[-4] = 0.049165
+    k[-3] = 0.079968
+    k[-2] = 0.113193
+    k[-1] = 0.139431
+    k[0] = 0.149464
+    k[7] = 0.004961
+    k[6] = 0.012246
+    k[5] = 0.026304
+    k[4] = 0.049165
+    k[3] = 0.079968
+    k[2] = 0.113193
+    k[1] = 0.139431
 
-    return gauss(input, k, r, name)
+    return gauss(input, k, rdom, name)
 
 
 def desaturate_noise(input, width, height):
@@ -392,11 +328,11 @@ def desaturate_noise(input, width, height):
     output[x, y, 1] = hl.select((hl.abs(blur[x, y, 1]) / hl.abs(input[x, y, 1]) < factor) &
                                 (hl.abs(input[x, y, 1]) < threshold) & (hl.abs(blur[x, y, 1]) < threshold),
                                 0.7 * blur[x, y, 1] + 0.3 * input[x, y, 1], input[x, y, 1])
-    
+
     output[x, y, 2] = hl.select((hl.abs(blur[x, y, 2]) / hl.abs(input[x, y, 2]) < factor) &
                                 (hl.abs(input[x, y, 2]) < threshold) & (hl.abs(blur[x, y, 2]) < threshold),
                                 0.7 * blur[x, y, 2] + 0.3 * input[x, y, 2], input[x, y, 2])
-    
+
     output.compute_root().parallel(y).vectorize(x, 16)
 
     return output
@@ -457,10 +393,10 @@ def chroma_denoise(input, width, height, denoise_passes):
     while p < denoise_passes:
         output = desaturate_noise(output, width, height)
         p += 1
-    
+
     if denoise_passes > 2:
         output = increase_saturation(output, 1.1)
-    
+
     return yuv_to_rgb(output)
 
 
@@ -470,7 +406,7 @@ def srgb(input, ccm):
 
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
-    r = hl.RDom([(0, 3)])
+    rdom = hl.RDom([(0, 3)])
 
     srgb_matrix[x, y] = hl.f32(0)
 
@@ -484,11 +420,12 @@ def srgb(input, ccm):
     srgb_matrix[1, 2] = hl.f32(ccm[2][1])
     srgb_matrix[2, 2] = hl.f32(ccm[2][2])
 
-    output[x, y, c] = hl.u16_sat(hl.sum(srgb_matrix[r, c] * input[x, y, r]))
+    output[x, y, c] = hl.u16_sat(hl.sum(srgb_matrix[rdom, c] * input[x, y, rdom]))
 
     return output
 
-def gauss(input, k, r, name):
+
+def gauss(input, k, rdom, name):
     blur_x = hl.Func(name + "_x")
     output = hl.Func(name)
 
@@ -497,14 +434,14 @@ def gauss(input, k, r, name):
     val = hl.Expr("val")
 
     if input.dimensions() == 2:
-        blur_x[x, y] = hl.sum(input[x + r, y] * k[r])
-        val = hl.sum(blur_x[x, y + r] * k[r])
+        blur_x[x, y] = hl.sum(input[x + rdom, y] * k[rdom])
+        val = hl.sum(blur_x[x, y + rdom] * k[rdom])
         if input.output_types()[0] == hl.UInt(16):
             val = hl.u16(val)
         output[x, y] = val
     else:
-        blur_x[x, y, c] = hl.sum(input[x + r, y, c] * k[r])
-        val = hl.sum(blur_x[x, y + r, c] * k[r])
+        blur_x[x, y, c] = hl.sum(input[x + rdom, y, c] * k[rdom])
+        val = hl.sum(blur_x[x, y + rdom, c] * k[rdom])
         if input.output_types()[0] == hl.UInt(16):
             val = hl.u16(val)
         output[x, y, c] = val
@@ -515,11 +452,12 @@ def gauss(input, k, r, name):
 
     return output
 
+
 def gauss_7x7(input, name):
     k = hl.Buffer(hl.Float(32), [7], "gauss_7x7_kernel")
     k.translate([-3])
 
-    r = hl.RDom([(-3, 7)])
+    rdom = hl.RDom([(-3, 7)])
 
     k.fill(0)
     k[-3] = 0.026267
@@ -530,7 +468,7 @@ def gauss_7x7(input, name):
     k[2] = 0.100742
     k[3] = 0.026267
 
-    return gauss(input, k, r, name)
+    return gauss(input, k, rdom, name)
 
 
 def diff(im1, im2, name):
@@ -544,6 +482,7 @@ def diff(im1, im2, name):
         output[x, y, c] = hl.i32(im1[x, y, c]) - hl.i32(im2[x, y, c])
 
     return output
+
 
 def combine(im1, im2, width, height, dist):
     init_mask1 = hl.Func("mask1_layer_0")
@@ -578,7 +517,7 @@ def combine(im1, im2, width, height, dist):
     for i in range(1, num_layers):
         print('        layer', i)
 
-        prev_layer_str = str(i-1)
+        prev_layer_str = str(i - 1)
         layer_str = str(i)
 
         laplace1 = diff(unblurred1, blurred1, "laplace1_layer_" + prev_layer_str)
@@ -666,11 +605,11 @@ def gamma_correct(input):
     gamma_con = -3604.425
 
     if input.dimensions() == 2:
-        output[x, y] = hl.u16(hl.select(input[x, y] < cutoff, 
+        output[x, y] = hl.u16(hl.select(input[x, y] < cutoff,
                                         gamma_toe * input[x, y],
                                         gamma_fac * hl.pow(input[x, y], gamma_pow) + gamma_con))
     else:
-        output[x, y, c] = hl.u16(hl.select(input[x, y, c] < cutoff, 
+        output[x, y, c] = hl.u16(hl.select(input[x, y, c] < cutoff,
                                            gamma_toe * input[x, y, c],
                                            gamma_fac * hl.pow(input[x, y, c], gamma_pow) + gamma_con))
 
@@ -691,11 +630,11 @@ def gamma_inverse(input):
     gamma_con = 0.055
 
     if input.dimensions() == 2:
-        output[x, y] = hl.u16(hl.select(input[x, y] < cutoff, 
+        output[x, y] = hl.u16(hl.select(input[x, y] < cutoff,
                                         gamma_toe * input[x, y],
                                         hl.pow(hl.f32(input[x, y]) / 65535 + gamma_con, gamma_pow) * gamma_fac))
     else:
-        output[x, y, c] = hl.u16(hl.select(input[x, y, c] < cutoff, 
+        output[x, y, c] = hl.u16(hl.select(input[x, y, c] < cutoff,
                                            gamma_toe * input[x, y, c],
                                            hl.pow(hl.f32(input[x, y, c]) / 65535 + gamma_con, gamma_pow) * gamma_fac))
 
@@ -713,23 +652,21 @@ def tone_map(input, width, height, compression, gain):
 
     x, y, c, v = hl.Var("x"), hl.Var("y"), hl.Var("c"), hl.Var("v")
 
-    r = hl.RDom([(0, 3)])
+    rdom = hl.RDom([(0, 3)])
 
     normal_dist[v] = hl.f32(hl.exp(-12.5 * hl.pow(hl.f32(v) / 65535 - 0.5, 2)))
 
-    grayscale[x, y] = hl.u16(hl.sum(hl.u32(input[x, y, r])) / 3)
+    grayscale[x, y] = hl.u16(hl.sum(hl.u32(input[x, y, rdom])) / 3)
 
     dark = grayscale
-
-    num_passes = 4
 
     comp_const = 1
     gain_const = 1
 
-    comp_slope = (compression - comp_const) / (num_passes)
-    gain_slope = (gain - gain_const) / (num_passes)
+    comp_slope = (compression - comp_const) / (TONE_MAP_PASSES)
+    gain_slope = (gain - gain_const) / (TONE_MAP_PASSES)
 
-    for i in range(num_passes):
+    for i in range(TONE_MAP_PASSES):
         print('    pass', i)
 
         norm_comp = i * comp_slope + comp_const
@@ -751,7 +688,6 @@ def tone_map(input, width, height, compression, gain):
     normal_dist.compute_root().vectorize(v, 16)
 
     return output
-
 
 
 def shift_bayer_to_rggb(input, cfa_pattern):
@@ -816,7 +752,8 @@ def sharpen(input, strength):
 
     return output
 
-def u8bit_interleaved(input):
+
+def u8bit_interleave(input):
     output = hl.Func("8bit_interleaved_output")
 
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
@@ -828,7 +765,6 @@ def u8bit_interleaved(input):
     return output
 
 
-
 '''
 Step 3 of HDR+ pipeline: finish
 
@@ -837,25 +773,26 @@ image : numpy ndarray
 
 Returns: numpy ndarray (finished image)
 '''
+
+
 def finish_image(imgs, width, height, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
                  white_balance_b, compression, gain, contrast_strength, cfa_pattern, ccm):
-
     print(black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
-                 white_balance_b, compression, gain)
-    
+          white_balance_b, compression, gain)
+
     print("bayer_to_rggb")
     bayer_shifted = shift_bayer_to_rggb(imgs, cfa_pattern)
 
     print("black_white_level")
     black_white_level_output = black_white_level(bayer_shifted, black_point, white_point)
-    
+
     print("white_balance")
     white_balance_output = white_balance(black_white_level_output, width, height, white_balance_r, white_balance_g0,
                                          white_balance_g1, white_balance_b)
 
     print("demosaic")
     demosaic_output = demosaic(white_balance_output, width, height)
-    
+
     print('chroma_denoise')
     chroma_denoised_output = chroma_denoise(demosaic_output, width, height, DENOISE_PASSES)
 
@@ -864,7 +801,7 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
 
     print("tone_map")
     tone_map_output = tone_map(srgb_output, width, height, compression, gain)
-    
+
     print("gamma_correct")
     gamma_correct_output = gamma_correct(tone_map_output)
 
@@ -875,6 +812,6 @@ def finish_image(imgs, width, height, black_point, white_point, white_balance_r,
     sharpen_output = sharpen(contrast_output, SHARPEN_STRENGTH)
 
     print('u8bit_interleave')
-    u8bit_interleaved_output = u8bit_interleaved(sharpen_output)
+    u8bit_interleave_output = u8bit_interleave(sharpen_output)
 
-    return u8bit_interleaved_output
+    return u8bit_interleave_output
