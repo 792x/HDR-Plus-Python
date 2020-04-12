@@ -1,4 +1,3 @@
-
 import numpy as np
 import rawpy
 import imageio
@@ -8,6 +7,7 @@ import halide as hl
 from datetime import datetime
 import threading
 from functools import partial
+os.environ['KIVY_NO_CONSOLELOG'] = '1' # Comment this line when debugging UI
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
 from kivy.factory import Factory
@@ -28,10 +28,8 @@ Loads a raw image
 image_path : str
     String representing the path to the image
 
-Returns: numpy ndarray with 3 values for each pixel
+Returns: numpy ndarray with 4 values for each pixel (RGGB)
 '''
-
-
 def load_image(image_path):
     with rawpy.imread(image_path) as raw:
         image = raw.raw_image_visible.copy()
@@ -39,19 +37,17 @@ def load_image(image_path):
 
 
 '''
-Converts a raw image to grayscale
+Decode a raw CFA pattern
 
-image : numpy ndarray
-    The image to be converted
+pattern : list of lists of integers (numpy.ndarray)
+    RawPy.raw_pattern: the smallest possible Bayer pattern of a raw image
 
-Returns: numpy ndarray, where each pixel has one value (average of 3 given values)
+Returns: Integer in range 1 - 4, where
+    1 : RGGB
+    2 : GRBG
+    3 : BGGR
+    4 : RGBG
 '''
-
-
-def to_grayscale(image):
-    return np.mean(image, axis=2)
-
-
 def decode_pattern(pattern):
     pattern_str = ""
     for row in pattern:
@@ -80,10 +76,9 @@ Loads a burst of images
 burst_path : str
     String representing the path to the folder containing the burst images
 
-Returns: list of raw images, list of grayscale images, reference image
+Returns: Halide buffer of raw images, reference image, white balance values for RGGB, 
+         black level, white level, CFA pattern, color correction matrix
 '''
-
-
 def load_images(burst_path):
     print(f'\n{"=" * 30}\nLoading images...\n{"=" * 30}')
     start = datetime.utcnow()
@@ -151,11 +146,20 @@ Main method of the HDR+ pipeline: align, merge, finish
 
 burst_path : str
     The path to the folder containing the burst images
+compression : float
+    Compression to be used in finish step
+gain : float
+    Gain to be used in finish step
+contrast : float
+    Contrast to be used in finish step
+UI : Root(FloatLayout) class object
+    Kivy object used to update UI elements
 
-Returns: str, str (paths to the reference and HDR images, respectively)
+After execution finishes, UI.original and UI.image will be set to the reference frame of the input,
+and the result of the burst processed by the HDR+ pipeline, respectively.
+
+If an error is encountered, these values will instead remain unchanged, and an error will be passed to the UI.
 '''
-
-
 def HDR(burst_path, compression, gain, contrast, UI):
     try:
         start = datetime.utcnow()
@@ -248,7 +252,7 @@ class Root(FloatLayout):
     # Path to the burst images
     path = ''
 
-    cancel = False
+    cancelled = False
 
     compression = 3.8
     gain = 1.1
@@ -265,17 +269,13 @@ class Root(FloatLayout):
         self.progress_popup.dismiss()
 
     def update_progress(self, num, *largs):
-        print(f'Attempting to update progress bar to {num}')
         self.progress_bar.value = num
 
     def update_paths(self, input_path, output_path, *largs):
-        print(f'Setting paths: {input_path}, {output_path}')
         self.original = input_path
         self.image = output_path
 
     def reload_images(self, instance):
-        print(f'Original path: {self.original}')
-        print(f'Image path: {self.image}')
         self.ids.image0.source = self.original
         self.ids.image0.reload()
         self.ids.image1.source = self.image
@@ -340,11 +340,11 @@ class Root(FloatLayout):
     def load(self, path, filename):
         # Set the path to the burst images
         self.path = path
-        self.cancel = False
+        self.cancelled = False
         self.dismiss_popup()
 
     def cancel(self):
-        self.cancel = True
+        self.cancelled = True
         self.dismiss_popup()
 
 

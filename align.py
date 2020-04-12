@@ -1,27 +1,24 @@
 import math
-
 from datetime import datetime
 import halide as hl
-
 from utils import time_diff, Point, gaussian_down4, box_down2, prev_tile, idx_layer, TILE_SIZE_2, DOWNSAMPLE_RATE
 
 '''
 Determines the best offset for tiles of the image at a given resolution, 
 provided the offsets for the layer above
 
-layer : numpy.ndarray
-    The layer for which the offset needs to be calculated
-prev_alignment : Point
+layer : Halide buffer
+    The downsampled layer for which the offset needs to be calculated
+    This is a layer of the four-level gaussian pyramid
+prev_alignment : Halide function
     Alignment of the previous layer
 prev_min : Point
     Min search region
 prev_max : Point
     Max search region
 
-Returns: Point
+Returns: Halide function representing an alignment of the current layer
 '''
-
-
 def align_layer(layer, prev_alignment, prev_min, prev_max):
     scores = hl.Func(layer.name() + "_scores")
     alignment = hl.Func(layer.name() + "_alignment")
@@ -54,16 +51,14 @@ def align_layer(layer, prev_alignment, prev_min, prev_max):
 
 '''
 Step 1 of HDR+ pipeline: align
+Creates a 4-level gaussian pyramid of downsampled images converted to grayscale.
+Uses first frame as reference. 
 
-images : list of numpy ndarray
-    The raw burst images
-grayscale : list of numpy ndarray
-    Grayscale versions of the images
+images : Halide buffer
+    The raw burst frames
 
-Returns: list of numpy ndarray (aligned images)
+Returns: Halide function representing an alignment of the burst frames
 '''
-
-
 def align_images(images):
     print(f'\n{"=" * 30}\nAligning images...\n{"=" * 30}')
     start = datetime.utcnow()

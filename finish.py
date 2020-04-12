@@ -1,7 +1,5 @@
 import math
-
 import halide as hl
-
 from utils import DENOISE_PASSES, TONE_MAP_PASSES, SHARPEN_STRENGTH
 
 
@@ -767,21 +765,51 @@ def u8bit_interleave(input):
 
 '''
 Step 3 of HDR+ pipeline: finish
+Finishes the merged burst images using the following steps:
+1  : Shift Bayer image to RGGB
+2  : Black- and white-level correction
+3  : White balancing
+4  : Demosaicing
+5  : Chroma denoising
+6  : sRGB color correction
+7  : Tone mapping (global)
+8  : Gamma correction
+9  : Contrast adjustment
+10 : Sharpening
+11 : 8-bit interleaving
 
-image : numpy ndarray
+image : Halide buffer
     The merged image to be finished
+width : Integer
+    Width of the image
+height : Integer
+    Height of the image
+black_point : Integer
+    Black level of the image to be used for black and white level correction
+white_point : Integer
+    White level of the image to be used for black and white level correction
+white_balance_x : Float
+    White balance value for color X (R, G, G, B)
+compression : Float
+    Compression value to be used for tone mapping
+gain : Float
+    Gain value to be used for tone mapping
+contrast_strength : Float
+    Contrast value to be used for contrast adjustment
+cfa_pattern : Integer
+    Represents the Bayer pattern of the image, used to shift Bayer to RGGB
+ccm : numpy.ndarray of shape (3, 4)
+    Color correction matrix, used for sRGB color correction
 
-Returns: numpy ndarray (finished image)
+Returns: Halide buffer (finished image)
 '''
-
-
-def finish_image(imgs, width, height, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
+def finish_image(image, width, height, black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
                  white_balance_b, compression, gain, contrast_strength, cfa_pattern, ccm):
     print(black_point, white_point, white_balance_r, white_balance_g0, white_balance_g1,
           white_balance_b, compression, gain)
 
     print("bayer_to_rggb")
-    bayer_shifted = shift_bayer_to_rggb(imgs, cfa_pattern)
+    bayer_shifted = shift_bayer_to_rggb(image, cfa_pattern)
 
     print("black_white_level")
     black_white_level_output = black_white_level(bayer_shifted, black_point, white_point)

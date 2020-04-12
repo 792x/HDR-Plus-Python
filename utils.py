@@ -21,24 +21,20 @@ end : datetime
 
 Returns: int
 '''
-
-
 def time_diff(start, end=None):
     if not end:
         end = datetime.utcnow()
     return int((end - start).total_seconds() * 1000)
 
 
-"""
+'''
 Point object which stores the coordinates x and y
 
 x : float
     x-coordinate
 y : float
     y-coordinate
-"""
-
-
+'''
 class Point:
     def __init__(self, x=None, y=None):
         if x is None and y is None:

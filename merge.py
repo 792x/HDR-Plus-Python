@@ -4,7 +4,19 @@ from utils import time_diff, Point, box_down2, idx_layer, idx_im, idx_0, idx_1, 
     MINIMUM_OFFSET, MAXIMUM_OFFSET
 import math
 
+'''
+Merges images in the temporal dimension.
+Weights different frames based on the similarity between the reference tile
+and the alternate tiles, minimizing L1 distances (least absolute deviation).
+Distances greater than some threshold (max_distribution) are discarded.
 
+images : Halide buffer
+    Burst frames to be merged
+alignment : Halide function
+    Calculated alignment of the burst frames
+
+Returns: Halide buffer (merged image)
+'''
 def merge_temporal(images, alignment):
     weight = hl.Func("merge_temporal_weights")
     total_weight = hl.Func("merge_temporal_total_weights")
@@ -61,6 +73,15 @@ def merge_temporal(images, alignment):
     return output
 
 
+'''
+Merges images in the spatial dimension.
+Smoothly blends overlapping tiles using modified raised cosine window.
+
+input : Halide buffer
+    image (burst frames merged in temporal dimension)
+
+Returns: Halide buffer (merged image)
+'''
 def merge_spatial(input):
     weight = hl.Func("raised_cosine_weights")
     output = hl.Func("merge_spatial_output")
@@ -94,13 +115,13 @@ def merge_spatial(input):
 '''
 Step 2 of HDR+ pipeline: merge
 
-images : list of numpy ndarray
-    Aligned burst images to be merged
+images : Halide buffer
+    Burst frames to be merged
+alignment : Halide function
+    Calculated alignment of the burst frames
 
-Returns: numpy ndarray (merged image)
+Returns: Halide buffer (merged image)
 '''
-
-
 def merge_images(images, alignment):
     print(f'\n{"=" * 30}\nMerging images...\n{"=" * 30}')
     start = datetime.utcnow()
