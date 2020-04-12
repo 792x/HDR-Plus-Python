@@ -8,7 +8,7 @@ import math
 Merges images in the temporal dimension.
 Weights different frames based on the similarity between the reference tile
 and the alternate tiles, minimizing L1 distances (least absolute deviation).
-Distances greater than some threshold (max_distribution) are discarded.
+Distances greater than some threshold (max_distance) are discarded.
 
 images : Halide buffer
     Burst frames to be merged
@@ -41,16 +41,16 @@ def merge_temporal(images, alignment):
     alt_val = layer[al_x, al_y, n]
 
     factor = 8.0
-    min_distribution = 10
-    max_distribution = 300 # max L1 distance, otherwise the value is not used
+    min_distance = 10
+    max_distance = 300 # max L1 distance, otherwise the value is not used
 
-    distribution = hl.sum(hl.abs(hl.cast(hl.Int(32), ref_val) - hl.cast(hl.Int(32), alt_val))) / 256
+    distance = hl.sum(hl.abs(hl.cast(hl.Int(32), ref_val) - hl.cast(hl.Int(32), alt_val))) / 256
 
-    normal_distribution = hl.max(1, hl.cast(hl.Int(32), distribution) / factor - min_distribution / factor)
+    normal_distance = hl.max(1, hl.cast(hl.Int(32), distance) / factor - min_distance / factor)
 
     # Weight for the alternate frame
-    weight[tx, ty, n] = hl.select(normal_distribution > (max_distribution - max_distribution), 0.0,
-                                  1.0 / normal_distribution)
+    weight[tx, ty, n] = hl.select(normal_distance > (max_distance - min_distance), 0.0,
+                                  1.0 / normal_distance)
 
     total_weight[tx, ty] = hl.sum(weight[tx, ty, rdom1]) + 1
 
