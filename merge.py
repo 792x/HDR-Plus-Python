@@ -42,12 +42,13 @@ def merge_temporal(images, alignment):
 
     factor = 8.0
     min_distribution = 10
-    max_distribution = 300
+    max_distribution = 300 # max L1 distance, otherwise the value is not used
 
     distribution = hl.sum(hl.abs(hl.cast(hl.Int(32), ref_val) - hl.cast(hl.Int(32), alt_val))) / 256
 
     normal_distribution = hl.max(1, hl.cast(hl.Int(32), distribution) / factor - min_distribution / factor)
 
+    # Weight for the alternate frame
     weight[tx, ty, n] = hl.select(normal_distribution > (max_distribution - max_distribution), 0.0,
                                   1.0 / normal_distribution)
 
@@ -61,6 +62,7 @@ def merge_temporal(images, alignment):
     ref_val = imgs_mirror[idx_im(tx, ix), idx_im(ty, iy), 0]
     alt_val = imgs_mirror[al_x, al_y, rdom1]
 
+    # Sum all values according to their weight, and divide by total weight to obtain average
     output[ix, iy, tx, ty] = hl.sum(weight[tx, ty, rdom1] * alt_val / total_weight[tx, ty]) + ref_val / total_weight[
         tx, ty]
 
@@ -88,6 +90,7 @@ def merge_spatial(input):
 
     v, x, y = hl.Var('v'), hl.Var('x'), hl.Var('y')
 
+    # modified raised cosine window
     weight[v] = 0.5 - 0.5 * hl.cos(2 * math.pi * (v + 0.5) / TILE_SIZE)
 
     weight_00 = weight[idx_0(x)] * weight[idx_0(y)]
