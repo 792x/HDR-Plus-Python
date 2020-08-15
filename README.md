@@ -1,7 +1,9 @@
 ![Image Banner](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/Banner.png)
 
 # HDR Plus Python
-Implementation with GUI for desktop of Google's HDR+ in Python using Halide bindings. This repository is provided as is and is not maintained.
+Implementation with GUI for desktop of Google's HDR+ in Python using Halide bindings. 
+
+This repository is provided as is and is not maintained.
 
 For the original paper see [https://www.hdrplusdata.org/hdrplus.pdf](https://www.hdrplusdata.org/hdrplus.pdf)
 
