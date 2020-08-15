@@ -27,6 +27,8 @@ This project was heavily inspired by [https://github.com/timothybrooks/hdr-plus]
 ### Graphical User Interface
 ![Image GUI](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/empty_gui_v2.png)
 
-###
-![Image Flowers_In](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/flowers_in.jpg) ![Image Flowers Out](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/flowers_out.jpg)
+Flowers In             |  Flowers Out
+:-------------------------:|:-------------------------:
+![Image Flowers_In](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/flowers_in.jpg)  |  ![Image Flowers Out](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/flowers_out.jpg)
+ 
 
