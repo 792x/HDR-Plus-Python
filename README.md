@@ -31,8 +31,6 @@ Flowers In             |  Flowers Out
 :-------------------------:|:-------------------------:
 ![Image Flowers_In](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/flowers_in.jpg)  |  ![Image Flowers Out](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/flowers_out.jpg)
 Flowers In             |  Flowers Out
-:-------------------------:|:-------------------------:
 ![Image Chairs In](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/chairs_input.jpg)  |  ![Image Chairs Out](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/chairs_output.jpg)
 Sunflower In             |  Sunflower Out
-:-------------------------:|:-------------------------:
 ![Image Sunflower In](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/input_sunflower.jpg)  |  ![Image Sunflower Out](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/output_sunflower.jpg)
