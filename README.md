@@ -24,9 +24,6 @@ gsutil -m cp -r gs://hdrplusdata/20171106_subset .
 
 `pip install -r requirements.txt`
 
-## Footnote
-This project was heavily inspired by [https://github.com/timothybrooks/hdr-plus](https://github.com/timothybrooks/hdr-plus)
-
 ## Examples
 Input            |  Output
 :-------------------------:|:-------------------------:
@@ -37,4 +34,8 @@ Input            |  Output
 ## Graphical User Interface
 ![Image GUI](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/empty_gui_v2.png)
 ![Image GUI Progress Bar](https://github.com/792x/HDR-Plus-Python/blob/master/Examples/progress_bar.png)
+
+
+## Footnote
+This project was heavily inspired by [https://github.com/timothybrooks/hdr-plus](https://github.com/timothybrooks/hdr-plus)
 
