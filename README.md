@@ -37,5 +37,5 @@ Input            |  Output
 
 
 ## Footnote
-This project was heavily inspired by [https://github.com/timothybrooks/hdr-plus](https://github.com/timothybrooks/hdr-plus)
+This project was inspired by [https://github.com/timothybrooks/hdr-plus](https://github.com/timothybrooks/hdr-plus)
 
